@@ -29,6 +29,7 @@ def main() -> int:
         dest="shortcuts_command", required=True
     )
     shortcut_commands.add_parser("status")
+    shortcut_commands.add_parser("reconcile")
     for operation in ("add", "move", "assign", "remove"):
         operation_parser = shortcut_commands.add_parser(operation)
         operation_parser.add_argument("request")
@@ -82,6 +83,8 @@ def main() -> int:
         manager.recover_reset_transaction(settings_path)
         if arguments.shortcuts_command == "status":
             result = manager.status()
+        elif arguments.shortcuts_command == "reconcile":
+            result = manager.reconcile_applications()
         elif arguments.shortcuts_command in {"add", "move", "assign", "remove"}:
             try:
                 request = json.loads(arguments.request)

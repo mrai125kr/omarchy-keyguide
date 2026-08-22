@@ -37,7 +37,8 @@ def status(count: int) -> dict[str, object]:
         "actions": [{"id": "action-notes", "title": "Notes",
                      "labelKey": "", "selectionKind": "command",
                      "selectionId": COMMAND_ID, "titleOverride": "My Notes",
-                     "actionKind": "exec", "modifiers": ["SUPER"],
+                     "actionKind": "exec", "launchKind": "webapp",
+                     "modifiers": ["SUPER"],
                      "key": "N"}] if count else [],
         "discoveryError": "",
     }

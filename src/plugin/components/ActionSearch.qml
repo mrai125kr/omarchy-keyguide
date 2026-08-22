@@ -361,6 +361,7 @@ Item {
             id: commandBadge
 
             visible: resultRow.resultData.kind === "command"
+              || resultRow.resultData.badgeKind === "webapp"
             width: visible ? commandBadgeLabel.implicitWidth + 18 : 0
             height: 26
             radius: height / 2
@@ -372,10 +373,14 @@ Item {
             Text {
               id: commandBadgeLabel
 
-              objectName: commandBadge.visible
-                ? "shortcutActionSearchCommandBadge" : ""
+              objectName: resultRow.resultData.kind === "command"
+                ? "shortcutActionSearchCommandBadge"
+                : (resultRow.resultData.badgeKind === "webapp"
+                    ? "shortcutActionSearchWebAppBadge" : "")
               anchors.centerIn: parent
-              text: I18n.text(root.language, "search.commandBadge", {})
+              text: I18n.text(root.language,
+                resultRow.resultData.kind === "command"
+                  ? "search.commandBadge" : "search.webAppBadge", {})
               color: root.accent
               font.family: root.fontFamily
               font.pixelSize: 11

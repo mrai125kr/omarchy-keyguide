@@ -218,6 +218,25 @@ TestCase {
     verify(chipX > row.width / 2)
   }
 
+  function test_webapp_action_shows_a_localized_webapp_badge() {
+    const search = createSearch({
+      language: "ko",
+      query: "chatgpt",
+      catalogItems: [],
+      actions: [{
+        id: "source-chatgpt", title: "ChatGPT", labelKey: "",
+        actionKind: "exec", launchKind: "webapp",
+        modifiers: ["SUPER", "SHIFT"], key: "A",
+        selectionKind: "action", selectionId: "action-source-chatgpt"
+      }]
+    })
+    tryCompare(search, "resultCount", 1)
+    const badge = findNamed(search, "shortcutActionSearchWebAppBadge", 0)
+    verify(badge !== null)
+    verify(badge.visible)
+    compare(badge.text, "(웹앱)")
+  }
+
   function test_general_action_does_not_repeat_the_key_in_small_text() {
     const search = createSearch({
       query: "demo", catalogItems: [],
@@ -241,7 +260,7 @@ TestCase {
     compare(findNamed(search, "shortcutActionSearchSecondaryText", 0), null)
   }
 
-  function test_existing_unmanaged_application_key_is_shown_at_the_right() {
+  function test_same_title_unmanaged_action_stays_separate_from_application() {
     const search = createSearch({
       query: "demo",
       catalogItems: [testRoot.catalog[0]],
@@ -251,7 +270,17 @@ TestCase {
         selectionKind: "action", selectionId: "action-source-demo-app"
       }]
     })
-    tryCompare(search, "resultCount", 1)
+    tryCompare(search, "resultCount", 2)
+    const action = search.results.filter(function(item) {
+      return item.kind === "action"
+    })[0]
+    const application = search.results.filter(function(item) {
+      return item.kind === "application"
+    })[0]
+    compare(action.currentChord, "Super + Shift + D")
+    compare(application.currentChord, "")
+    search.currentIndex = search.results.indexOf(action)
+    wait(0)
     const row = findNamed(search, "shortcutActionSearchResult", 0)
     const chip = findNamed(search, "shortcutActionSearchShortcutChip", 0)
     verify(row !== null && chip !== null && chip.visible)

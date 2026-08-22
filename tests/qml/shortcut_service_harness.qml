@@ -80,7 +80,7 @@ ShellRoot {
       actions: count ? [{
         id: "action-notes", title: "Notes", labelKey: "", selectionKind: "command",
         selectionId: "command:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        titleOverride: "My Notes", actionKind: "exec",
+        titleOverride: "My Notes", actionKind: "exec", launchKind: "webapp",
         modifiers: ["SUPER"], key: "N"
       }] : [],
       discoveryError: ""
@@ -222,6 +222,7 @@ ShellRoot {
           return
         }
         if (semanticStatus.actions[0].selectionId !== "command:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            || semanticStatus.actions[0].launchKind !== "webapp"
             || semanticBindings[0].selection_kind !== "command"
             || semanticBindings[0].title_override !== "My Notes") {
           testRoot.fail("semantic binding metadata was discarded")

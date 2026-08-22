@@ -321,6 +321,27 @@ class CatalogDiscoveryTests(unittest.TestCase):
             resolved.arguments,
         )
 
+    def test_application_resolution_does_not_focus_the_omarchy_dispatcher(self) -> None:
+        """A shared command router must not identify one particular application."""
+        self.write_user(
+            "omarchy-keyguide-settings.desktop",
+            desktop(
+                "Omarchy Keyguide",
+                Exec="omarchy shell shell summon mrai.keyguide",
+            ),
+        )
+
+        resolved = self.discovery().resolve(
+            "application", "application:omarchy-keyguide-settings.desktop"
+        )
+
+        self.assertEqual(
+            r"'omarchy\-keyguide\-settings' '" + str(self.session_launcher)
+            + " -- " + str(self.launcher)
+            + " omarchy-keyguide-settings.desktop'",
+            resolved.arguments,
+        )
+
     def test_application_resolution_normalizes_a_post_discovery_entry_race(self) -> None:
         path = self.write_user("demo.desktop", desktop("Demo"))
         discovery = self.discovery()

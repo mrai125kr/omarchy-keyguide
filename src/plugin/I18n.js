@@ -102,6 +102,7 @@ const messages = {
   "search.category.action": ["General actions", "일반 액션", "一般的なアクション", "常规操作", "Acciones generales"],
   "search.category.command": ["Commands", "명령", "コマンド", "命令", "Comandos"],
   "search.commandBadge": ["(CMD)", "(CMD)", "(CMD)", "(CMD)", "(CMD)"],
+  "search.webAppBadge": ["(WEB APP)", "(웹앱)", "(ウェブアプリ)", "(网页应用)", "(APP WEB)"],
   "search.commandHelp": ["Advanced: runs an executable command directly.", "고급 기능: 실행 명령을 직접 실행합니다.", "上級者向け: 実行可能なコマンドを直接起動します。", "高级选项：直接运行可执行命令。", "Avanzado: ejecuta un comando directamente."],
   "search.refreshing": ["Refreshing installed apps and commands…", "설치된 프로그램과 명령을 새로 확인하는 중…", "インストール済みアプリとコマンドを更新しています…", "正在刷新已安装的应用和命令…", "Actualizando las aplicaciones y los comandos instalados…"],
   "search.selectionRemoved": ["That item is no longer installed. Choose another result.", "선택한 항목이 더 이상 설치되어 있지 않습니다. 다른 결과를 선택하세요.", "選択した項目は現在インストールされていません。別の結果を選んでください。", "所选项目已不再安装。请选择其他结果。", "Ese elemento ya no está instalado. Elige otro resultado."],

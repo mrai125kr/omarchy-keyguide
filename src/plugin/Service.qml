@@ -23,7 +23,7 @@ Item {
     "python3", "-m", "keyguide_backend", "settings", "patch"
   ]
   property var shortcutsStatusCommand: [
-    "python3", "-m", "keyguide_backend", "shortcuts", "status"
+    "python3", "-m", "keyguide_backend", "shortcuts", "reconcile"
   ]
   property var shortcutsMutationCommandPrefix: [
     "python3", "-m", "keyguide_backend", "shortcuts"
@@ -671,7 +671,10 @@ Item {
       const semanticActionNames = actionNames.concat([
         "labelKey", "selectionKind", "selectionId", "titleOverride"
       ])
-      const hasSemanticFields = hasExactKeys(action, semanticActionNames)
+      const enhancedActionNames = semanticActionNames.concat(["launchKind"])
+      const hasLegacySemanticFields = hasExactKeys(action, semanticActionNames)
+      const hasSemanticFields = hasExactKeys(action, enhancedActionNames)
+        || hasLegacySemanticFields
       if ((!hasExactKeys(action, actionNames) && !hasSemanticFields)
           || typeof action.id !== "string" || !action.id
           || actionIds.indexOf(action.id) !== -1 || typeof action.title !== "string"
@@ -682,12 +685,15 @@ Item {
             && (["action", "application", "command"].indexOf(action.selectionKind) === -1
               || typeof action.selectionId !== "string" || !action.selectionId
               || typeof action.labelKey !== "string"
-              || typeof action.titleOverride !== "string"))) {
+              || typeof action.titleOverride !== "string"
+              || (!hasLegacySemanticFields
+                && ["", "webapp"].indexOf(action.launchKind) === -1)))) {
         throw new Error("shortcut action has an invalid shape")
       }
       actionIds.push(action.id)
       return {
         id: action.id, title: action.title, actionKind: action.actionKind,
+        launchKind: hasLegacySemanticFields ? "" : String(action.launchKind || ""),
         modifiers: action.modifiers.slice(), key: action.key,
         labelKey: hasSemanticFields ? action.labelKey : "",
         selectionKind: hasSemanticFields ? action.selectionKind : "action",

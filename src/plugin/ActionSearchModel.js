@@ -85,6 +85,7 @@ function actionResult(language, action) {
     path: "",
     keywords: [title, englishTitle, fallback, currentChord],
     labelKey: labelKey,
+    badgeKind: String(action && action.launchKind || ""),
     currentChord: currentChord,
     score: 0
   }
@@ -118,27 +119,8 @@ function appendChord(result, id, chord) {
     result[id].push(chord)
 }
 
-function exactCatalogMatches(title, catalogItems, kind) {
-  const target = normalized(title)
-  if (!target)
-    return []
-  return arrayFrom(catalogItems).filter(function(item) {
-    if (String(item && item.kind || "") !== kind)
-      return false
-    const aliases = [item && item.title, item && item.englishTitle]
-    if (kind === "command") {
-      const pieces = String(item && item.path || "").split("/")
-      aliases.push(pieces.length > 0 ? pieces[pieces.length - 1] : "")
-    }
-    return aliases.some(function(alias) {
-      return normalized(alias) === target
-    })
-  })
-}
-
 function registeredChordLinks(language, actions, catalogItems) {
   const chords = ({})
-  const absorbedActions = ({})
   arrayFrom(actions).forEach(function(action) {
     const selectionKind = String(action && action.selectionKind || "action")
     const selectionId = String(action && action.selectionId || "")
@@ -148,24 +130,9 @@ function registeredChordLinks(language, actions, catalogItems) {
     if ((selectionKind === "application" || selectionKind === "command")
         && selectionId) {
       appendChord(chords, selectionId, chord)
-      return
     }
-    if (selectionKind !== "action" || String(action && action.labelKey || ""))
-      return
-    const applicationMatches = exactCatalogMatches(
-      action && action.title, catalogItems, "application")
-    const commandMatches = applicationMatches.length === 0
-      ? exactCatalogMatches(action && action.title, catalogItems, "command") : []
-    const matches = applicationMatches.length === 1
-      ? applicationMatches
-      : (applicationMatches.length === 0 && commandMatches.length === 1
-          ? commandMatches : [])
-    if (matches.length !== 1)
-      return
-    appendChord(chords, String(matches[0].id || ""), chord)
-    absorbedActions[String(action && action.id || "")] = true
   })
-  return { chords: chords, absorbedActions: absorbedActions }
+  return { chords: chords }
 }
 
 function searchFields(item) {
@@ -204,7 +171,6 @@ function results(query, language, actions, catalogItems, limit) {
   }).concat(arrayFrom(actions).filter(function(action) {
     const selectionKind = String(action && action.selectionKind || "action")
     return selectionKind === "action"
-      && !links.absorbedActions[String(action && action.id || "")]
   }).map(function(action) {
     return actionResult(language, action)
     }))

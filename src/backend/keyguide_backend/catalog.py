@@ -272,7 +272,15 @@ def _exec_focus_candidate(value: str) -> str:
     if index >= len(tokens) or tokens[index].startswith("%"):
         return ""
     candidate = Path(tokens[index]).name
-    if candidate in {"env", "flatpak", "gtk-launch", "uwsm-app", "sh", "bash"}:
+    if candidate in {
+        "env",
+        "flatpak",
+        "gtk-launch",
+        "omarchy",
+        "uwsm-app",
+        "sh",
+        "bash",
+    }:
         return ""
     return candidate
 

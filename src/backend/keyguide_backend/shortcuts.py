@@ -346,6 +346,19 @@ def action_label_key(english_title: str) -> str:
     return ""
 
 
+def action_launch_kind(action: "ShortcutAction") -> str:
+    """Classify launcher-backed actions that need an explicit picker badge."""
+    if action.action_kind != "exec":
+        return ""
+    try:
+        arguments = shlex.split(action.action_argument, posix=True)
+    except ValueError:
+        return ""
+    if arguments and Path(arguments[0]).name == "omarchy-launch-webapp":
+        return "webapp"
+    return ""
+
+
 def _lua_string(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
@@ -2511,6 +2524,7 @@ class ShortcutManager:
                     item.entry.title_override if item.entry is not None else ""
                 ),
                 "actionKind": item.action.action_kind,
+                "launchKind": action_launch_kind(item.action),
                 "modifiers": list(item.action.modifiers),
                 "key": item.action.key,
             }
@@ -2958,6 +2972,104 @@ class ShortcutManager:
             )
         entries.append(replacement)
         return replace(state, entries=tuple(entries))
+
+    def _reconciled_application_state(
+        self, state: ManagedShortcutState
+    ) -> ManagedShortcutState:
+        entries: list[ManagedShortcutEntry] = []
+        for entry in state.entries:
+            current = entry.current
+            try:
+                command = shlex.split(current.action_argument, posix=True)
+            except ValueError:
+                command = []
+            if (
+                entry.selection_kind != "application"
+                or current.action_kind != "exec"
+                or len(command) < 2
+                or Path(command[0]).name != "omarchy-launch-or-focus"
+                or command[1] != "omarchy"
+            ):
+                entries.append(entry)
+                continue
+            try:
+                resolved = self.catalog_discovery.resolve(
+                    "application", entry.selection_id
+                )
+                replacement = self._custom_command(
+                    resolved.executable, resolved.arguments
+                )
+            except (catalog.CatalogError, ShortcutValidationError):
+                entries.append(entry)
+                continue
+            entries.append(
+                replace(
+                    entry,
+                    current=replace(current, action_argument=replacement),
+                )
+            )
+        return replace(state, entries=tuple(entries))
+
+    def reconcile_applications(self) -> dict[str, Any]:
+        """Repair legacy shared-router focus patterns without guessing identity."""
+        with self._locked():
+            state, snapshot = self._read_state()
+            candidate = self._reconciled_application_state(state)
+            active, runtime, discovery_error = self._load_catalog_snapshot()
+            if candidate == state:
+                return self._status_for(
+                    state, runtime, active, discovery_error
+                )
+
+            changed_ids = {
+                previous.id
+                for previous, updated in zip(state.entries, candidate.entries)
+                if previous != updated
+            }
+            for entry in state.entries:
+                if entry.id in changed_ids:
+                    self._assert_action_active(
+                        active,
+                        runtime,
+                        entry.current,
+                        "managed application shortcut changed before repair",
+                    )
+            self._preflight_config()
+
+            latest_state, latest_snapshot = self._read_state()
+            if not self._same_file(snapshot, latest_snapshot):
+                raise ShortcutMutationError(
+                    "managed shortcut module changed concurrently"
+                )
+            latest_active, latest_runtime, _ = self._load_catalog_snapshot()
+            for entry in latest_state.entries:
+                if entry.id in changed_ids:
+                    self._assert_action_active(
+                        latest_active,
+                        latest_runtime,
+                        entry.current,
+                        "managed application shortcut changed before repair",
+                    )
+            latest_candidate = self._reconciled_application_state(latest_state)
+            if latest_candidate != candidate:
+                raise ShortcutConflictError(
+                    "application catalog changed before shortcut repair",
+                    code="catalog.selection_changed",
+                    context={"kind": "application"},
+                )
+            confirmed_active, confirmed_runtime, confirmed_error = (
+                self._publish_state(
+                    latest_state,
+                    latest_candidate,
+                    latest_snapshot,
+                )
+            )
+            return self._status_for(
+                latest_candidate,
+                confirmed_runtime,
+                confirmed_active,
+                confirmed_error,
+            )
 
     def status(self) -> dict[str, Any]:
         with self._locked():

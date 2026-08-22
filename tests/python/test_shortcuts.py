@@ -1405,6 +1405,7 @@ bindd
                     "selectionId": "action-cf579ebb6e3be320d2a9969ee8fdbe5d9077306ac8d2f6258399303540be610b",
                     "titleOverride": "",
                     "actionKind": "exec",
+                    "launchKind": "",
                     "modifiers": ["SUPER"],
                     "key": "A",
                 },
@@ -1416,6 +1417,7 @@ bindd
                     "selectionId": "action-98c7c2a21ee1931ec0ffb39b40c818ec6ff5501c466679ec3ec1a8be2142562c",
                     "titleOverride": "",
                     "actionKind": "exec",
+                    "launchKind": "",
                     "modifiers": ["SUPER"],
                     "key": "B",
                 },
@@ -1440,6 +1442,109 @@ bindd
             [("Alpha", "exec"), ("Close window", "lua")],
             [(item["title"], item["actionKind"]) for item in actions],
         )
+
+    def test_status_marks_omarchy_webapp_actions_for_the_picker(self) -> None:
+        """A source web app must remain distinct from same-title desktop apps."""
+        self.menu = "SUPER SHIFT + A → ChatGPT\n"
+        command = "omarchy-launch-webapp 'https://chatgpt.com'"
+        self.hyprctl = self.runtime_record(
+            "A", "ChatGPT", command, modmask=64 + 1
+        )
+        self.source_records = f"SUPER SHIFT + A → ChatGPT\texec\t{command}\n"
+
+        actions = self.manager().status()["actions"]
+
+        self.assertEqual(1, len(actions))
+        self.assertEqual("webapp", actions[0]["launchKind"])
+
+    def test_reconcile_repairs_a_managed_omarchy_application_focus_pattern(self) -> None:
+        """A selected app using the shared router is repaired transactionally."""
+        desktop_id = "omarchy-keyguide-settings.desktop"
+        (self.catalog_apps / desktop_id).write_text(
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Omarchy Keyguide\n"
+            "Exec=omarchy shell shell summon mrai.keyguide\n",
+            encoding="utf-8",
+        )
+        old_command = (
+            f"{self.catalog_focus_launcher} omarchy "
+            f"'{self.catalog_session_launcher} -- {self.catalog_launcher} {desktop_id}'"
+        )
+        action = ShortcutAction(
+            modifiers=("SUPER",),
+            key="H",
+            description="Omarchy Keyguide",
+            action_kind="exec",
+            action_argument=old_command,
+        )
+        state = ManagedShortcutState(
+            entries=(ManagedShortcutEntry(
+                id="action-keyguide",
+                kind="new",
+                source_binding_id=None,
+                original=None,
+                current=action,
+                selection_kind="application",
+                selection_id=f"application:{desktop_id}",
+            ),)
+        )
+        manager = self.manager(catalog_discovery=self.catalog_discovery())
+        manager.path.parent.mkdir(parents=True, exist_ok=True)
+        manager.path.write_bytes(state.to_bytes())
+        manager.path.chmod(0o600)
+        self.menu = "SUPER + H → Omarchy Keyguide\n"
+        self.hyprctl = self.runtime_record("H", "Omarchy Keyguide", old_command)
+        self.source_records = (
+            f"SUPER + H → Omarchy Keyguide\texec\t{old_command}\n"
+        )
+        self.base_menu = ""
+        self.base_hyprctl = ""
+        self.base_source_records = ""
+
+        manager.reconcile_applications()
+
+        repaired = ManagedShortcutState.from_bytes(manager.path.read_bytes())
+        self.assertEqual(
+            f"{self.catalog_focus_launcher} 'omarchy\\-keyguide\\-settings' "
+            f"'{self.catalog_session_launcher} -- {self.catalog_launcher} {desktop_id}'",
+            repaired.entries[0].current.action_argument,
+        )
+        self.assertIn(("hyprctl", "reload"), self.calls)
+
+    def test_reconcile_leaves_unavailable_application_selection_untouched(self) -> None:
+        """A missing desktop entry must never destroy a still-runnable shortcut."""
+        old_command = (
+            f"{self.catalog_focus_launcher} omarchy "
+            f"'{self.catalog_session_launcher} -- {self.catalog_launcher} missing.desktop'"
+        )
+        action = ShortcutAction(
+            modifiers=("SUPER",),
+            key="H",
+            description="Missing application",
+            action_kind="exec",
+            action_argument=old_command,
+        )
+        state = ManagedShortcutState(
+            entries=(ManagedShortcutEntry(
+                id="action-missing",
+                kind="new",
+                source_binding_id=None,
+                original=None,
+                current=action,
+                selection_kind="application",
+                selection_id="application:missing.desktop",
+            ),)
+        )
+        manager = self.manager(catalog_discovery=self.catalog_discovery())
+        manager.path.parent.mkdir(parents=True, exist_ok=True)
+        manager.path.write_bytes(state.to_bytes())
+        manager.path.chmod(0o600)
+
+        manager.reconcile_applications()
+
+        self.assertEqual(state.to_bytes(), manager.path.read_bytes())
+        self.assertNotIn(("hyprctl", "reload"), self.calls)
 
     def test_known_action_label_map_matches_the_qml_catalog_contract(self) -> None:
         expected_existing = {
@@ -3301,6 +3406,29 @@ class ShortcutCliTests(unittest.TestCase):
             result = cli.main()
 
         self.assertEqual(0, result)
+        self.assertEqual(expected, json.loads(output.getvalue()))
+
+    def test_reconcile_command_repairs_applications_before_emitting_status(self) -> None:
+        expected = {"version": 1, "managedCount": 1}
+        output = io.StringIO()
+
+        with (
+            patch.object(
+                ShortcutManager,
+                "reconcile_applications",
+                return_value=expected,
+            ) as reconcile,
+            patch.object(
+                sys,
+                "argv",
+                ["keyguide_backend", "shortcuts", "reconcile"],
+            ),
+            redirect_stdout(output),
+        ):
+            result = cli.main()
+
+        self.assertEqual(0, result)
+        reconcile.assert_called_once_with()
         self.assertEqual(expected, json.loads(output.getvalue()))
 
     def test_add_and_move_commands_parse_one_json_request(self) -> None:

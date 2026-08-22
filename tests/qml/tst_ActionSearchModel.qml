@@ -184,23 +184,32 @@ TestCase {
     compare(found[0].currentChord, "Super + D")
   }
 
-  function test_existing_unmanaged_application_title_merges_without_a_duplicate_action() {
+  function test_same_title_webapp_does_not_merge_into_an_application() {
     const application = catalogItem(
       "application", "application:chatgpt.desktop",
       "ChatGPT", "ChatGPT", "AI assistant")
     const existingAction = {
       id: "source-chatgpt", title: "ChatGPT", labelKey: "",
       actionKind: "exec", modifiers: ["SUPER", "SHIFT"], key: "A",
-      selectionKind: "action", selectionId: "action-source-chatgpt"
+      selectionKind: "action", selectionId: "action-source-chatgpt",
+      launchKind: "webapp"
     }
 
     const found = ActionSearchModel.results(
       "chatgpt", "ko", [existingAction], [application], 30)
 
-    compare(found.length, 1)
-    compare(found[0].kind, "application")
-    compare(found[0].id, application.id)
-    compare(found[0].currentChord, "Super + Shift + A")
+    compare(found.length, 2)
+    const appResult = found.filter(function(item) {
+      return item.kind === "application"
+    })[0]
+    const actionResult = found.filter(function(item) {
+      return item.kind === "action"
+    })[0]
+    compare(appResult.id, application.id)
+    compare(appResult.currentChord, "")
+    compare(actionResult.id, existingAction.id)
+    compare(actionResult.currentChord, "Super + Shift + A")
+    compare(actionResult.badgeKind, "webapp")
   }
 
   function test_ambiguous_application_titles_do_not_claim_an_existing_key() {
