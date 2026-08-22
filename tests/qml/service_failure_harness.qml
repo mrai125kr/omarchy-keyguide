@@ -8,6 +8,10 @@ ShellRoot {
   property int phase: 0
   property int phaseTicks: 0
   property var service: null
+  readonly property var boundedProcessPrefix: [
+    "/usr/bin/python3",
+    String(Qt.resolvedUrl("src/backend/keyguide_backend/bounded_process.py")).replace("file://", "")
+  ]
   property string expectedError: ""
 
   readonly property var validBindingsCommand: [
@@ -60,6 +64,7 @@ ShellRoot {
     }
     service = component.createObject(serviceHost, {
       shell: shellStub,
+      boundedProcessCommandPrefix: boundedProcessPrefix,
       hudSource: "",
       settingsPath: "",
       observerCommand: [

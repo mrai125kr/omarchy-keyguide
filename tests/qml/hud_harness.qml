@@ -8,6 +8,10 @@ ShellRoot {
   property int phaseTicks: 0
   property var service: null
   property var hud: null
+  readonly property var boundedProcessPrefix: [
+    "/usr/bin/python3",
+    String(Qt.resolvedUrl("src/backend/keyguide_backend/bounded_process.py")).replace("file://", "")
+  ]
 
   Item {
     id: serviceHost
@@ -123,6 +127,7 @@ ShellRoot {
     }
     service = component.createObject(serviceHost, {
       shell: shellStub,
+      boundedProcessCommandPrefix: boundedProcessPrefix,
       settingsPath: "",
       observerCommand: ["/usr/bin/python3", "-c", "import time; print('{\"super\":true,\"ctrl\":true,\"shift\":false,\"alt\":false,\"actionPressed\":false,\"wheelPulse\":0}', flush=True); time.sleep(30)"],
       bindingsCommand: ["/usr/bin/printf", "[{\"id\":\"terminal\",\"presentation_id\":\"terminal\",\"modifiers\":[\"SUPER\",\"CTRL\"],\"key\":\"RETURN\",\"description\":\"Terminal\",\"dispatcher\":\"exec\",\"argument\":\"terminal\",\"mouse\":false,\"editable\":true,\"action_kind\":\"exec\",\"action_argument\":\"terminal\",\"edit_reason\":\"\"},{\"id\":\"browser\",\"presentation_id\":\"browser\",\"modifiers\":[\"SUPER\"],\"key\":\"B\",\"description\":\"Browser\",\"dispatcher\":\"exec\",\"argument\":\"browser\",\"mouse\":false,\"editable\":true,\"action_kind\":\"exec\",\"action_argument\":\"browser\",\"edit_reason\":\"\"}]"],

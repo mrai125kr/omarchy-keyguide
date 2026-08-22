@@ -7,6 +7,10 @@ ShellRoot {
   property int phase: 0
   property int phaseTicks: 0
   property var service: null
+  readonly property var boundedProcessPrefix: [
+    "/usr/bin/python3",
+    String(Qt.resolvedUrl("src/backend/keyguide_backend/bounded_process.py")).replace("file://", "")
+  ]
   property var results: []
   property string stableShortcutStatus: ""
   property string stableBindings: ""
@@ -113,6 +117,7 @@ ShellRoot {
     }
     service = component.createObject(serviceHost, {
       shell: shellStub, hudSource: "", settingsPath: "",
+      boundedProcessCommandPrefix: boundedProcessPrefix,
       observerCommand: ["/usr/bin/python3", "-c", "import time; time.sleep(30)"],
       bindingsCommand: ["/usr/bin/printf", "[]"],
       settingsCommand: ["/usr/bin/printf", "{\"version\":2,\"enabled\":false,\"position\":\"top\",\"scale\":1.2,\"opacity\":0.7,\"groups\":[\"SUPER\"],\"hiddenBindingIds\":[],\"followTheme\":false,\"language\":\"en\"}"],

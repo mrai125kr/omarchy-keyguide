@@ -35,6 +35,9 @@ SHORTCUT_EDIT_ROW_RELATIVE_PATH = (
 EXECUTABLE_PICKER_RELATIVE_PATH = (
     ".config/omarchy/plugins/mrai.keyguide/components/ExecutablePicker.qml"
 )
+BOUNDED_PROCESS_RELATIVE_PATH = (
+    ".local/lib/omarchy-keyguide/keyguide_backend/bounded_process.py"
+)
 LOCALIZED_SEARCH_RELATIVE_PATHS = (
     ".local/lib/omarchy-keyguide/keyguide_backend/catalog.py",
     ".config/omarchy/plugins/mrai.keyguide/ActionSearchModel.js",
@@ -57,6 +60,7 @@ OWNED_RELATIVE_PATHS = (
     ".config/omarchy/plugins/mrai.keyguide/manifest.json",
     ".config/omarchy/plugins/mrai.keyguide/ActionSearchModel.js",
     ".config/omarchy/plugins/mrai.keyguide/BarWidget.qml",
+    BOUNDED_PROCESS_RELATIVE_PATH,
     ".config/omarchy/plugins/mrai.keyguide/Hud.qml",
     ".config/omarchy/plugins/mrai.keyguide/HudModel.js",
     ".config/omarchy/plugins/mrai.keyguide/I18n.js",
@@ -919,6 +923,7 @@ class SimulatedUserInstall:
         self,
         *,
         legacy_new_only: tuple[str, ...] = (
+            BOUNDED_PROCESS_RELATIVE_PATH,
             ICON_RELATIVE_PATH,
             VISIBILITY_MODEL_RELATIVE_PATH,
             SHORTCUTS_RELATIVE_PATH,
@@ -2147,6 +2152,7 @@ class InstallManifestTests(unittest.TestCase):
         self.assert_command_succeeded(sandbox.run_make("install"))
         document = json.loads(sandbox.manifest.read_text(encoding="utf-8"))
         historical_new_only = (
+            BOUNDED_PROCESS_RELATIVE_PATH,
             EXECUTABLE_PICKER_RELATIVE_PATH,
             *LOCALIZED_SEARCH_RELATIVE_PATHS,
         )
@@ -2167,6 +2173,7 @@ class InstallManifestTests(unittest.TestCase):
         """Recreate the sanitized live retry state for a retained JS handoff."""
         sandbox.prepare_retained_clock_edit(
             legacy_new_only=(
+                BOUNDED_PROCESS_RELATIVE_PATH,
                 VISIBILITY_MODEL_RELATIVE_PATH,
                 SHORTCUTS_RELATIVE_PATH,
                 SHORTCUT_EDIT_ROW_RELATIVE_PATH,
@@ -5024,6 +5031,27 @@ xkb_symbols "test" {
                 Path(reservation["temporary_path"]),
             )
 
+    def test_preserve_upgrade_accepts_pre_bounded_process_inventory(self) -> None:
+        """The current public fileset must reserve the new limiter on upgrade."""
+        sandbox = self.simulated_user(plugin_enabled=False)
+        sandbox.prepare_retained_clock_edit(legacy_new_only=(
+            BOUNDED_PROCESS_RELATIVE_PATH,
+        ))
+        shell_before = sandbox.shell_json.read_bytes()
+
+        result = sandbox.run_make(
+            "install", extra_env={"PRESERVE_USER_SHELL": "1"}
+        )
+
+        self.assert_command_succeeded(result)
+        final = json.loads(sandbox.manifest.read_text(encoding="utf-8"))
+        self.assertEqual("installed", final["install_state"])
+        self.assertEqual(shell_before, sandbox.shell_json.read_bytes())
+        self.assertEqual(
+            (REPOSITORY / "src/backend/keyguide_backend/bounded_process.py").read_bytes(),
+            (sandbox.home / BOUNDED_PROCESS_RELATIVE_PATH).read_bytes(),
+        )
+
     def test_preserve_upgrade_accepts_pre_visibility_inventory(self) -> None:
         """The icon-era manifest must reserve every later runtime dependency."""
         sandbox = self.simulated_user(plugin_enabled=False)
@@ -5035,6 +5063,7 @@ xkb_symbols "test" {
         settings.write_bytes(b'{"enabled":true,"opacity":0.61}\n')
         sandbox.prepare_retained_clock_edit(
             legacy_new_only=(
+                BOUNDED_PROCESS_RELATIVE_PATH,
                 VISIBILITY_MODEL_RELATIVE_PATH,
                 SHORTCUTS_RELATIVE_PATH,
                 SHORTCUT_EDIT_ROW_RELATIVE_PATH,
@@ -5207,6 +5236,7 @@ xkb_symbols "test" {
         custom_env = {"XDG_DATA_HOME": str(custom_data_home)}
         sandbox.prepare_retained_clock_edit(
             legacy_new_only=(
+                BOUNDED_PROCESS_RELATIVE_PATH,
                 VISIBILITY_MODEL_RELATIVE_PATH,
                 SHORTCUTS_RELATIVE_PATH,
                 SHORTCUT_EDIT_ROW_RELATIVE_PATH,
@@ -6248,6 +6278,7 @@ xkb_symbols "test" {
         self.assert_command_succeeded(sandbox.install())
         document = json.loads(sandbox.manifest.read_text(encoding="utf-8"))
         legacy_paths = [
+            sandbox.home / BOUNDED_PROCESS_RELATIVE_PATH,
             sandbox.home
             / ".local/lib/omarchy-keyguide/keyguide_backend/groups.py",
             sandbox.home
@@ -6277,12 +6308,31 @@ xkb_symbols "test" {
         for path in sandbox.owned_paths():
             self.assertFalse(path.exists(), str(path))
 
+    def test_uninstall_accepts_manifest_from_before_bounded_process(self) -> None:
+        """The current public fileset remains exactly removable after this fix."""
+        sandbox = self.sandbox()
+        self.assert_command_succeeded(sandbox.install())
+        document = json.loads(sandbox.manifest.read_text(encoding="utf-8"))
+        limiter = sandbox.home / BOUNDED_PROCESS_RELATIVE_PATH
+        limiter.unlink()
+        document["owned_files"].remove(str(limiter))
+        sandbox.manifest.write_text(
+            json.dumps(document, indent=2) + "\n", encoding="utf-8"
+        )
+
+        self.assert_command_succeeded(sandbox.uninstall())
+
+        self.assertFalse(sandbox.manifest.exists())
+        for path in sandbox.owned_paths():
+            self.assertFalse(path.exists(), str(path))
+
     def test_uninstall_accepts_manifest_from_before_executable_picker(self) -> None:
         """The immediately preceding fileset must remain safely removable."""
         sandbox = self.sandbox()
         self.assert_command_succeeded(sandbox.install())
         document = json.loads(sandbox.manifest.read_text(encoding="utf-8"))
         for relative in (
+            BOUNDED_PROCESS_RELATIVE_PATH,
             EXECUTABLE_PICKER_RELATIVE_PATH,
             *LOCALIZED_SEARCH_RELATIVE_PATHS,
         ):
@@ -6304,7 +6354,10 @@ xkb_symbols "test" {
         sandbox = self.sandbox()
         self.assert_command_succeeded(sandbox.install())
         document = json.loads(sandbox.manifest.read_text(encoding="utf-8"))
-        for relative in LOCALIZED_SEARCH_RELATIVE_PATHS:
+        for relative in (
+            BOUNDED_PROCESS_RELATIVE_PATH,
+            *LOCALIZED_SEARCH_RELATIVE_PATHS,
+        ):
             path = sandbox.home / relative
             path.unlink()
             document["owned_files"].remove(str(path))

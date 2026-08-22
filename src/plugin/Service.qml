@@ -38,6 +38,9 @@ Item {
     "PYTHONPATH": runtimeRoot,
     "PYTHONDONTWRITEBYTECODE": "1"
   })
+  property var boundedProcessCommandPrefix: [
+    "python3", "-m", "keyguide_backend.bounded_process"
+  ]
   property var pluginBootstrapCommand: []
   property string repositoryRoot: ""
   property bool runtimeReady: false
@@ -45,6 +48,11 @@ Item {
   property bool runtimeInitializationActive: false
   property bool runtimeBootstrapAttemptStarted: false
   property string runtimeInitializationError: ""
+  readonly property int catalogOutputByteLimit: 64 * 1024 * 1024
+  readonly property int helperOutputByteLimit: 1024 * 1024
+  readonly property int diagnosticOutputByteLimit: 64 * 1024
+  readonly property int stdoutOutputLimitExit: 120
+  readonly property int stderrOutputLimitExit: 121
 
   property var settings: defaultSettings()
   property var shortcutStatus: defaultShortcutStatus()
@@ -395,9 +403,11 @@ Item {
     actionCatalogListLanguage = String(settings.language || "en")
     actionCatalogListAttemptActive = true
     actionCatalogListAttemptStarted = false
-    actionCatalogListProcess.command = actionCatalogListCommandPrefix.concat([
-      actionCatalogListLanguage
-    ])
+    actionCatalogListProcess.command = boundedProcessCommand(
+      actionCatalogListCommandPrefix.concat([actionCatalogListLanguage]),
+      catalogOutputByteLimit,
+      diagnosticOutputByteLimit
+    )
     actionCatalogListProcess.running = true
     return true
   }
@@ -409,7 +419,11 @@ Item {
     actionCatalogFingerprintGeneration = actionCatalogGeneration
     actionCatalogFingerprintAttemptActive = true
     actionCatalogFingerprintAttemptStarted = false
-    actionCatalogFingerprintProcess.command = actionCatalogFingerprintCommand
+    actionCatalogFingerprintProcess.command = boundedProcessCommand(
+      actionCatalogFingerprintCommand,
+      helperOutputByteLimit,
+      diagnosticOutputByteLimit
+    )
     actionCatalogFingerprintProcess.running = true
     return true
   }
@@ -724,10 +738,14 @@ Item {
     shortcutMutationActive = true
     shortcutMutationAttemptStarted = false
     shortcutMutationOperation = operation
-    shortcutMutationProcess.command = shortcutsMutationCommandPrefix.concat(
-      operation === "reset-all"
-        ? [operation]
-        : [operation, JSON.stringify(request)]
+    shortcutMutationProcess.command = boundedProcessCommand(
+      shortcutsMutationCommandPrefix.concat(
+        operation === "reset-all"
+          ? [operation]
+          : [operation, JSON.stringify(request)]
+      ),
+      helperOutputByteLimit,
+      diagnosticOutputByteLimit
     )
     shortcutMutationProcess.running = true
     return true
@@ -816,9 +834,11 @@ Item {
     settingsSaveAttemptActive = true
     settingsSaveAttemptStarted = false
     settingsWriteGeneration += 1
-    settingsPatchProcess.command = settingsPatchCommandPrefix.concat([
-      JSON.stringify(normalized)
-    ])
+    settingsPatchProcess.command = boundedProcessCommand(
+      settingsPatchCommandPrefix.concat([JSON.stringify(normalized)]),
+      helperOutputByteLimit,
+      diagnosticOutputByteLimit
+    )
     settingsPatchProcess.running = true
     return true
   }
@@ -1021,6 +1041,32 @@ Item {
     return decodeUserError(value)
   }
 
+  function boundedProcessCommand(command, stdoutLimit, stderrLimit) {
+    const wrapped = []
+    for (let index = 0; boundedProcessCommandPrefix
+        && index < boundedProcessCommandPrefix.length; index += 1) {
+      wrapped.push(String(boundedProcessCommandPrefix[index]))
+    }
+    wrapped.push(
+      "--stdout-limit", String(stdoutLimit),
+      "--stderr-limit", String(stderrLimit),
+      "--"
+    )
+    for (let index = 0; command && index < command.length; index += 1)
+      wrapped.push(String(command[index]))
+    return wrapped
+  }
+
+  function isOutputLimitExit(exitCode) {
+    return exitCode === stdoutOutputLimitExit || exitCode === stderrOutputLimitExit
+  }
+
+  function outputLimitError(label, exitCode) {
+    const channel = exitCode === stdoutOutputLimitExit
+      ? "stdout" : (exitCode === stderrOutputLimitExit ? "stderr" : "output")
+    return String(label || "helper") + " " + channel + " output limit exceeded"
+  }
+
   function finishBindingsAttempt() {
     const refreshAgain = bindingsRefreshPending
     bindingsRefreshPending = false
@@ -1149,7 +1195,9 @@ Item {
       const current = root.actionCatalogWatchEnabled
         && root.actionCatalogListGeneration === root.actionCatalogGeneration
         && root.actionCatalogListLanguage === String(root.settings.language || "en")
-      if (current && exitCode === 0) {
+      if (current && root.isOutputLimitExit(exitCode)) {
+        root.actionCatalogError = root.outputLimitError("action catalog", exitCode)
+      } else if (current && exitCode === 0) {
         try {
           const parsed = root.parseActionCatalog(actionCatalogListStdout.text)
           root.actionCatalog = parsed
@@ -1194,7 +1242,10 @@ Item {
       const current = root.actionCatalogWatchEnabled
         && root.actionCatalogFingerprintGeneration === root.actionCatalogGeneration
       let changed = false
-      if (current && exitCode === 0) {
+      if (current && root.isOutputLimitExit(exitCode)) {
+        root.actionCatalogError = root.outputLimitError(
+          "action catalog fingerprint", exitCode)
+      } else if (current && exitCode === 0) {
         try {
           const fingerprint = root.parseActionCatalogFingerprint(
             actionCatalogFingerprintStdout.text)
@@ -1223,12 +1274,11 @@ Item {
 
   Process {
     id: runtimeBootstrapProcess
-    command: root.pluginBootstrapCommand
+    command: root.boundedProcessCommand(
+      root.pluginBootstrapCommand, 0, root.diagnosticOutputByteLimit)
+    environment: root.backendEnvironment
 
-    stderr: StdioCollector {
-      id: runtimeBootstrapStderr
-      waitForEnd: true
-    }
+    stderr: StdioCollector { id: runtimeBootstrapStderr; waitForEnd: true }
 
     onStarted: root.runtimeBootstrapAttemptStarted = true
 
@@ -1241,7 +1291,11 @@ Item {
 
     onExited: function(exitCode) {
       if (!root.runtimeInitializationActive) return
-      if (exitCode !== 0) {
+      if (root.isOutputLimitExit(exitCode)) {
+        root.failRuntimeInitialization(root.outputLimitError(
+          "plugin runtime setup", exitCode))
+        return
+      } else if (exitCode !== 0) {
         const detail = String(runtimeBootstrapStderr.text || "").trim()
         root.failRuntimeInitialization(
           "plugin runtime setup failed" + (detail ? ": " + detail : "")
@@ -1293,7 +1347,8 @@ Item {
 
   Process {
     id: bindingsProcess
-    command: root.bindingsCommand
+    command: root.boundedProcessCommand(
+      root.bindingsCommand, root.helperOutputByteLimit, root.diagnosticOutputByteLimit)
     environment: root.backendEnvironment
 
     stdout: StdioCollector { id: bindingsStdout; waitForEnd: true }
@@ -1310,7 +1365,9 @@ Item {
 
     onExited: function(exitCode) {
       if (!root.bindingsAttemptActive) return
-      if (exitCode === 0) root.applyBindings(bindingsStdout.text)
+      if (root.isOutputLimitExit(exitCode))
+        root.failBindings(root.outputLimitError("bindings", exitCode))
+      else if (exitCode === 0) root.applyBindings(bindingsStdout.text)
       else root.failBindings(root.decodeUserError(bindingsStderr.text)
         || "bindings command failed")
       root.finishBindingsAttempt()
@@ -1319,7 +1376,8 @@ Item {
 
   Process {
     id: settingsProcess
-    command: root.settingsCommand
+    command: root.boundedProcessCommand(
+      root.settingsCommand, root.helperOutputByteLimit, root.diagnosticOutputByteLimit)
     environment: root.backendEnvironment
 
     stdout: StdioCollector { id: settingsStdout; waitForEnd: true }
@@ -1338,6 +1396,8 @@ Item {
       if (!root.settingsAttemptActive) return
       if (root.settingsAttemptGeneration !== root.settingsWriteGeneration) {
         root.settingsRefreshPending = true
+      } else if (root.isOutputLimitExit(exitCode)) {
+        root.settingsError = root.outputLimitError("settings", exitCode)
       } else if (exitCode === 0) {
         root.applySettings(settingsStdout.text)
       } else {
@@ -1365,6 +1425,11 @@ Item {
 
     onExited: function(exitCode) {
       if (!root.settingsSaveActive) return
+      if (root.isOutputLimitExit(exitCode)) {
+        root.finishSettingsSave(false, root.outputLimitError(
+          "settings patch", exitCode))
+        return
+      }
       if (exitCode !== 0) {
         root.finishSettingsSave(
           false,
@@ -1383,7 +1448,9 @@ Item {
 
   Process {
     id: shortcutStatusProcess
-    command: root.shortcutsStatusCommand
+    command: root.boundedProcessCommand(
+      root.shortcutsStatusCommand, root.helperOutputByteLimit,
+      root.diagnosticOutputByteLimit)
     environment: root.backendEnvironment
 
     stdout: StdioCollector { id: shortcutStatusStdout; waitForEnd: true }
@@ -1401,7 +1468,9 @@ Item {
 
     onExited: function(exitCode) {
       if (!root.shortcutStatusAttemptActive) return
-      if (exitCode === 0) {
+      if (root.isOutputLimitExit(exitCode)) {
+        root.shortcutStatusError = root.outputLimitError("shortcut status", exitCode)
+      } else if (exitCode === 0) {
         root.applyShortcutStatus(shortcutStatusStdout.text)
       } else {
         root.shortcutStatusError = root.decodeUserError(shortcutStatusStderr.text)
@@ -1429,6 +1498,14 @@ Item {
 
     onExited: function(exitCode) {
       if (!root.shortcutMutationActive) return
+      if (root.isOutputLimitExit(exitCode)) {
+        root.finishShortcutMutation(
+          false,
+          root.outputLimitError("shortcut mutation", exitCode),
+          true
+        )
+        return
+      }
       if (exitCode !== 0) {
         root.finishShortcutMutation(
           false,

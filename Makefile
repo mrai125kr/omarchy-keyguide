@@ -44,6 +44,10 @@ test-qml:
 	@cat build/service-failure-qml-test.log
 	@rg -q 'KEYGUIDE_SERVICE_FAILURE_TEST_PASS' build/service-failure-qml-test.log
 	@! rg -q 'KEYGUIDE_SERVICE_FAILURE_TEST_FAIL' build/service-failure-qml-test.log
+	@harness="$$(mktemp ./qml-service-output-limit-test.XXXXXX.qml)"; trap 'rm -f "$$harness"' EXIT; cp tests/qml/service_output_limit_harness.qml "$$harness"; timeout 12s env QT_LOGGING_RULES='qt.qpa.services=false' quickshell --no-color -p "$$harness" > build/service-output-limit-qml-test.log 2>&1 || { cat build/service-output-limit-qml-test.log; exit 1; }
+	@cat build/service-output-limit-qml-test.log
+	@rg -q 'KEYGUIDE_SERVICE_OUTPUT_LIMIT_TEST_PASS' build/service-output-limit-qml-test.log
+	@! rg -q 'KEYGUIDE_SERVICE_OUTPUT_LIMIT_TEST_FAIL' build/service-output-limit-qml-test.log
 	@tests/qml/run_settings_service_harness.sh
 	@tests/qml/run_shortcut_service_harness.sh
 	@tests/qml/run_plugin_runtime_harness.sh

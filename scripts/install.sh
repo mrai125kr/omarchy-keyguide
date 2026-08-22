@@ -1279,6 +1279,7 @@ owned_files=(
   "$lib_dir/keyguide_backend/__init__.py"
   "$lib_dir/keyguide_backend/__main__.py"
   "$lib_dir/keyguide_backend/bindings.py"
+  "$lib_dir/keyguide_backend/bounded_process.py"
   "$lib_dir/keyguide_backend/catalog.py"
   "$lib_dir/keyguide_backend/compat.py"
   "$lib_dir/keyguide_backend/groups.py"
@@ -1309,6 +1310,7 @@ source_files=(
   "src/backend/keyguide_backend/__init__.py"
   "src/backend/keyguide_backend/__main__.py"
   "src/backend/keyguide_backend/bindings.py"
+  "src/backend/keyguide_backend/bounded_process.py"
   "src/backend/keyguide_backend/catalog.py"
   "src/backend/keyguide_backend/compat.py"
   "src/backend/keyguide_backend/groups.py"
@@ -1540,22 +1542,27 @@ localized_search_suffixes = (
     "/mrai.keyguide/I18n.js",
     "/mrai.keyguide/components/ActionSearch.qml",
 )
+bounded_process_suffix = "/keyguide_backend/bounded_process.py"
 
 
 historical_plans = (
     expected_files,
-    without_suffixes(*localized_search_suffixes),
+    without_suffixes(bounded_process_suffix),
+    without_suffixes(bounded_process_suffix, *localized_search_suffixes),
     without_suffixes(
+        bounded_process_suffix,
         *localized_search_suffixes,
         "/mrai.keyguide/components/ExecutablePicker.qml",
     ),
     without_suffixes(
+        bounded_process_suffix,
         *localized_search_suffixes,
         "/keyguide_backend/shortcuts.py",
         "/mrai.keyguide/components/ShortcutEditRow.qml",
         "/mrai.keyguide/components/ExecutablePicker.qml",
     ),
     without_suffixes(
+        bounded_process_suffix,
         *localized_search_suffixes,
         "/keyguide_backend/shortcuts.py",
         "/mrai.keyguide/components/ShortcutEditRow.qml",
@@ -1563,6 +1570,7 @@ historical_plans = (
         "/mrai.keyguide/components/ExecutablePicker.qml",
     ),
     without_suffixes(
+        bounded_process_suffix,
         *localized_search_suffixes,
         "/keyguide_backend/shortcuts.py",
         "/mrai.keyguide/components/ShortcutEditRow.qml",
@@ -1571,6 +1579,7 @@ historical_plans = (
         "/mrai.keyguide/components/ExecutablePicker.qml",
     ),
     without_suffixes(
+        bounded_process_suffix,
         *localized_search_suffixes,
         "/keyguide_backend/shortcuts.py",
         "/mrai.keyguide/components/ShortcutEditRow.qml",
@@ -1581,6 +1590,7 @@ historical_plans = (
         "/mrai.keyguide/components/ExecutablePicker.qml",
     ),
     without_suffixes(
+        bounded_process_suffix,
         *localized_search_suffixes,
         "/keyguide_backend/shortcuts.py",
         "/mrai.keyguide/components/ShortcutEditRow.qml",

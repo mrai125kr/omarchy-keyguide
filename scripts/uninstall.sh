@@ -60,6 +60,7 @@ owned_files=(
   "$lib_dir/keyguide_backend/__init__.py"
   "$lib_dir/keyguide_backend/__main__.py"
   "$lib_dir/keyguide_backend/bindings.py"
+  "$lib_dir/keyguide_backend/bounded_process.py"
   "$lib_dir/keyguide_backend/catalog.py"
   "$lib_dir/keyguide_backend/compat.py"
   "$lib_dir/keyguide_backend/groups.py"
@@ -702,23 +703,33 @@ localized_search_suffixes = (
     "/mrai.keyguide/I18n.js",
     "/mrai.keyguide/components/ActionSearch.qml",
 )
+bounded_process_suffix = "/keyguide_backend/bounded_process.py"
+
+
+pre_bounded_process_files = without_current_suffixes(
+    bounded_process_suffix,
+)
 
 
 pre_localized_search_files = without_current_suffixes(
+    bounded_process_suffix,
     *localized_search_suffixes,
 )
 
 pre_executable_picker_files = without_current_suffixes(
+    bounded_process_suffix,
     *localized_search_suffixes,
     "/mrai.keyguide/components/ExecutablePicker.qml",
 )
 pre_shortcut_editor_files = without_current_suffixes(
+    bounded_process_suffix,
     *localized_search_suffixes,
     "/keyguide_backend/shortcuts.py",
     "/mrai.keyguide/components/ShortcutEditRow.qml",
     "/mrai.keyguide/components/ExecutablePicker.qml",
 )
 pre_visibility_model_files = without_current_suffixes(
+    bounded_process_suffix,
     *localized_search_suffixes,
     "/keyguide_backend/shortcuts.py",
     "/mrai.keyguide/components/ShortcutEditRow.qml",
@@ -726,6 +737,7 @@ pre_visibility_model_files = without_current_suffixes(
     "/mrai.keyguide/components/ExecutablePicker.qml",
 )
 pre_icon_files = without_current_suffixes(
+    bounded_process_suffix,
     *localized_search_suffixes,
     "/keyguide_backend/shortcuts.py",
     "/mrai.keyguide/components/ShortcutEditRow.qml",
@@ -734,6 +746,7 @@ pre_icon_files = without_current_suffixes(
     "/mrai.keyguide/components/ExecutablePicker.qml",
 )
 pre_dependency_files = without_current_suffixes(
+    bounded_process_suffix,
     *localized_search_suffixes,
     "/keyguide_backend/shortcuts.py",
     "/mrai.keyguide/components/ShortcutEditRow.qml",
@@ -744,6 +757,7 @@ pre_dependency_files = without_current_suffixes(
     "/mrai.keyguide/components/ExecutablePicker.qml",
 )
 pre_complete_hud_files = without_current_suffixes(
+    bounded_process_suffix,
     *localized_search_suffixes,
     "/keyguide_backend/shortcuts.py",
     "/mrai.keyguide/components/ShortcutEditRow.qml",
@@ -756,6 +770,7 @@ pre_complete_hud_files = without_current_suffixes(
 )
 expected_plans = (
     expected_files,
+    pre_bounded_process_files,
     pre_localized_search_files,
     pre_executable_picker_files,
     pre_shortcut_editor_files,

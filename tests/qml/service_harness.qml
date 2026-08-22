@@ -9,6 +9,10 @@ ShellRoot {
   property int phaseTicks: 0
   property var service: null
   property bool localizationChecked: false
+  readonly property var boundedProcessPrefix: [
+    "/usr/bin/python3",
+    String(Qt.resolvedUrl("src/backend/keyguide_backend/bounded_process.py")).replace("file://", "")
+  ]
 
   Item {
     id: serviceHost
@@ -79,6 +83,7 @@ ShellRoot {
     }
     service = component.createObject(serviceHost, {
       shell: shellStub,
+      boundedProcessCommandPrefix: boundedProcessPrefix,
       hudSource: "",
       settingsPath: "",
       observerCommand: [
@@ -110,7 +115,8 @@ ShellRoot {
     onTriggered: {
       testRoot.phaseTicks += 1
       if (testRoot.phaseTicks > 80) {
-        testRoot.fail("phase " + testRoot.phase + " timed out")
+        testRoot.fail("phase " + testRoot.phase + " timed out: "
+          + String(testRoot.service ? testRoot.service.lastError : "no service"))
         return
       }
 
