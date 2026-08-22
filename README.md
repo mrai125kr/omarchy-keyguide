@@ -1,6 +1,6 @@
 # Omarchy Keyguide
 
-[English](README.md) · [한국어](README.ko.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
+[English](README.md) · [한국어](README.ko.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Español](README.es.md)
 
 > Public repository: <https://github.com/mrai125kr/omarchy-keyguide>
 
@@ -8,6 +8,25 @@ Omarchy Keyguide is a removable shortcut guide for Omarchy. It renders active
 bindings in an input-transparent HUD and provides settings for both HUD
 presentation and a deliberately limited shortcut editor. It never grabs,
 consumes, or synthesizes input and never edits Omarchy's user binding file.
+
+## Purpose and intended users
+
+Keyguide helps people learn and use Omarchy shortcuts without having to
+memorize every combination or repeatedly search configuration files. It is
+especially useful for new Omarchy users, but it also gives experienced users a
+quick, searchable view of the bindings that are active on the current machine.
+
+Use it to:
+
+- hold a Super modifier combination and see the shortcuts available now;
+- search actions in English or the selected interface language;
+- find installed graphical applications and commands in the same chooser;
+- move, replace, remove, or restore supported shortcuts with conflict checks;
+- adjust HUD position, scale, opacity, theme behavior, and visible rows.
+
+Keyguide is not a general-purpose macro recorder or an unrestricted Hyprland
+configuration editor. Shortcut editing is intentionally limited to actions it
+can reconstruct and verify safely.
 
 ## HUD behavior
 
@@ -139,6 +158,25 @@ added directly by URL:
 omarchy plugin add https://github.com/mrai125kr/omarchy-keyguide.git --enable
 ```
 
+The first enable compiles a small non-grabbing input observer from the checked-in
+C source, so it may take a moment. No executable binary is downloaded. When the
+Keyguide icon appears on the bar, click it for quick controls or open the full
+Settings panel.
+
+### First use
+
+1. Open Keyguide Settings from the bar icon.
+2. Choose the interface language. English is the default; Korean, Japanese,
+   Simplified Chinese, and Spanish are included.
+3. Choose the HUD position, scale, opacity, theme behavior, and visible modifier
+   groups.
+4. Hold `Super`, or `Super` together with Ctrl, Shift, and/or Alt, to show the
+   active shortcuts for that exact modifier group.
+5. In Shortcut Editing, select a free key to register an action. Use `Change`
+   beside an existing row to replace it, or `Remove` to leave that key free.
+6. Use `Reset all` to restore removable original bindings and remove shortcuts
+   created by Keyguide without resetting unrelated Omarchy settings.
+
 Omarchy clones the repository into `~/.config/omarchy/plugins/mrai.keyguide`.
 On first enable, Keyguide compiles its non-grabbing input observer from the
 checked-in C source into the clone's ignored `build/` directory; the Python
@@ -210,6 +248,24 @@ For an unchanged installation, the explicit preserve command is also a safe
 one-step upgrade. The separate `make uninstall` then `make install` path remains
 available. The uninstaller accepts the earlier pre-bar-widget manifest so an
 existing MVP installation can follow either authenticated path safely.
+
+## Troubleshooting
+
+Run the compatibility probe first:
+
+```sh
+PYTHONPATH=src/backend python -m keyguide_backend compat
+```
+
+- If the observer cannot be built, install the standard Arch build tools with
+  `omarchy pkg add base-devel`, then update or reinstall Keyguide.
+- If the HUD cannot observe held keys, check the probe result for a readable
+  keyboard event device.
+- If the plugin is installed but its UI does not appear, run
+  `omarchy restart shell` and check again.
+- Validate a downloaded source tree with `omarchy plugin validate .`.
+- Keyguide refuses unsafe, ambiguous, duplicate, or concurrently changed
+  bindings and reports the reason instead of keeping a partial change.
 
 To explicitly reset managed shortcuts and remove saved presentation
 preferences too, run:
