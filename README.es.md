@@ -4,6 +4,8 @@
 
 > Repositorio público: <https://github.com/mrai125kr/omarchy-keyguide>
 
+![Ajustes de Omarchy Keyguide y vista previa del HUD](preview.png)
+
 Omarchy Keyguide es un complemento para Omarchy que muestra los atajos activos
 en un HUD que no interfiere con la entrada. También permite registrar,
 modificar y eliminar atajos dentro de un conjunto deliberadamente limitado y

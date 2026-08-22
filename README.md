@@ -4,6 +4,8 @@
 
 > Public repository: <https://github.com/mrai125kr/omarchy-keyguide>
 
+![Omarchy Keyguide settings and live HUD preview](preview.png)
+
 Omarchy Keyguide is a removable shortcut guide for Omarchy. It renders active
 bindings in an input-transparent HUD and provides settings for both HUD
 presentation and a deliberately limited shortcut editor. It never grabs,

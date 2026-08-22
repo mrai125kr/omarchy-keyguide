@@ -4,6 +4,8 @@
 
 > 公开仓库：<https://github.com/mrai125kr/omarchy-keyguide>
 
+![Omarchy Keyguide 设置与 HUD 实时预览](preview.png)
+
 Omarchy Keyguide 是一款面向 Omarchy 的插件。它用不干扰输入的 HUD 显示当前可用
 快捷键，并允许用户在受控的安全范围内注册、修改和移除快捷键。
 

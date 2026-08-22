@@ -4,6 +4,8 @@
 
 > 공개 저장소: <https://github.com/mrai125kr/omarchy-keyguide>
 
+![Omarchy Keyguide 설정과 실시간 HUD 미리보기](preview.png)
+
 Omarchy Keyguide는 현재 사용할 수 있는 단축키를 입력을 방해하지 않는 HUD로
 보여 주고, 안전한 범위 안에서 단축키를 등록·변경·제거할 수 있게 해 주는
 Omarchy용 플러그인입니다.

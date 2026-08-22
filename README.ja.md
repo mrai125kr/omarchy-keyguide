@@ -4,6 +4,8 @@
 
 > 公開リポジトリ：<https://github.com/mrai125kr/omarchy-keyguide>
 
+![Omarchy Keyguide の設定と HUD ライブプレビュー](preview.png)
+
 Omarchy Keyguide は、現在利用できるショートカットを入力を妨げない HUD に表示し、
 安全な範囲でショートカットの登録・変更・削除を行える Omarchy 用プラグインです。
 
