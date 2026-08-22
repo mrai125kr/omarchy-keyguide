@@ -1,0 +1,7 @@
+Third-party review
+------------------
+The Noctalia Keybind Cheatsheet was reviewed as prior art. The Omarchy
+Keyguide MVP is a clean-room implementation and copies or translates no
+third-party source code. No third-party source code is copied in the MVP.
+Its runtime binding provider delegates display normalization to the installed
+`omarchy menu keybindings --print` command.

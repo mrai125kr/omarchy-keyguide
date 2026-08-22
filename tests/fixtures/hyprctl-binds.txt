@@ -1,0 +1,449 @@
+bindd
+	modmask: 64
+	submap:
+	key: K
+	keycode: 0
+	catchall: false
+	description: Keybindings
+	dispatcher: __lua
+	arg: 101
+
+bindd
+	modmask: 64
+	submap:
+	key: SPACE
+	keycode: 0
+	catchall: false
+	description: Omarchy menu
+	dispatcher: __lua
+	arg: 103
+
+bindd
+	modmask: 64
+	submap:
+	key: RETURN
+	keycode: 0
+	catchall: false
+	description: Terminal
+	dispatcher: __lua
+	arg: 105
+
+bindd
+	modmask: 65
+	submap:
+	key: RETURN
+	keycode: 0
+	catchall: false
+	description: Browser
+	dispatcher: __lua
+	arg: 107
+
+bindd
+	modmask: 64
+	submap:
+	key: SUPER + code:10
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 1
+	dispatcher: __lua
+	arg: 109
+
+bindd
+	modmask: 64
+	submap:
+	key: mouse:272
+	keycode: 0
+	catchall: false
+	description: Move window
+	dispatcher: __lua
+	arg: 111
+
+bindd
+	modmask: 64
+	submap:
+	key: mouse:273
+	keycode: 0
+	catchall: false
+	description: Resize window
+	dispatcher: __lua
+	arg: 113
+
+bindd
+	modmask: 64
+	submap:
+	key: mouse_down
+	keycode: 0
+	catchall: false
+	description: Scroll active workspace forward
+	dispatcher: __lua
+	arg: 115
+
+bindd
+	modmask: 64
+	submap:
+	key:
+	keycode: 33
+	catchall: false
+	description: Pseudo window
+	dispatcher: __lua
+	arg: 119
+
+bindd
+	modmask: 64
+	submap:
+	key: F12
+	keycode: 0
+	catchall: false
+	description: Keyguide internal observer
+	dispatcher: exec
+	arg: keyguide-internal observe
+
+bindd
+	modmask: 0
+	submap:
+	key: F9
+	keycode: 0
+	catchall: false
+	description: Start dictation (push-to-talk)
+	dispatcher: __lua
+	arg: 117
+
+bindd
+	modmask: 64
+	submap:
+	key: ESCAPE
+	keycode: 0
+	catchall: false
+	description: System menu
+	dispatcher: __lua
+	arg: 201
+
+bindd
+	modmask: 64
+	submap:
+	key: F
+	keycode: 0
+	catchall: false
+	description: Full screen
+	dispatcher: __lua
+	arg: 202
+
+bindd
+	modmask: 64
+	submap:
+	key: W
+	keycode: 0
+	catchall: false
+	description: Close window
+	dispatcher: __lua
+	arg: 203
+
+bindd
+	modmask: 64
+	submap:
+	key: T
+	keycode: 0
+	catchall: false
+	description: Toggle window floating/tiling
+	dispatcher: __lua
+	arg: 204
+
+bindd
+	modmask: 64
+	submap:
+	key: J
+	keycode: 0
+	catchall: false
+	description: Toggle window split
+	dispatcher: __lua
+	arg: 205
+
+bindd
+	modmask: 64
+	submap:
+	key: O
+	keycode: 0
+	catchall: false
+	description: Pop window out (float & pin)
+	dispatcher: __lua
+	arg: 206
+
+bindd
+	modmask: 64
+	submap:
+	key: C
+	keycode: 0
+	catchall: false
+	description: Universal copy
+	dispatcher: __lua
+	arg: 207
+
+bindd
+	modmask: 64
+	submap:
+	key: V
+	keycode: 0
+	catchall: false
+	description: Universal paste
+	dispatcher: __lua
+	arg: 208
+
+bindd
+	modmask: 64
+	submap:
+	key: X
+	keycode: 0
+	catchall: false
+	description: Universal cut
+	dispatcher: __lua
+	arg: 209
+
+bindd
+	modmask: 64
+	submap:
+	key: PRINT
+	keycode: 0
+	catchall: false
+	description: Color picker
+	dispatcher: __lua
+	arg: 210
+
+bindd
+	modmask: 64
+	submap:
+	key: 0
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 10
+	dispatcher: __lua
+	arg: 211
+
+bindd
+	modmask: 64
+	submap:
+	key: 2
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 2
+	dispatcher: __lua
+	arg: 212
+
+bindd
+	modmask: 64
+	submap:
+	key: 3
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 3
+	dispatcher: __lua
+	arg: 213
+
+bindd
+	modmask: 64
+	submap:
+	key: 4
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 4
+	dispatcher: __lua
+	arg: 214
+
+bindd
+	modmask: 64
+	submap:
+	key: 5
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 5
+	dispatcher: __lua
+	arg: 215
+
+bindd
+	modmask: 64
+	submap:
+	key: 6
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 6
+	dispatcher: __lua
+	arg: 216
+
+bindd
+	modmask: 64
+	submap:
+	key: 7
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 7
+	dispatcher: __lua
+	arg: 217
+
+bindd
+	modmask: 64
+	submap:
+	key: 8
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 8
+	dispatcher: __lua
+	arg: 218
+
+bindd
+	modmask: 64
+	submap:
+	key: 9
+	keycode: 0
+	catchall: false
+	description: Switch to workspace 9
+	dispatcher: __lua
+	arg: 219
+
+bindd
+	modmask: 64
+	submap:
+	key: TAB
+	keycode: 0
+	catchall: false
+	description: Next workspace
+	dispatcher: __lua
+	arg: 220
+
+bindd
+	modmask: 64
+	submap:
+	key: DOWN
+	keycode: 0
+	catchall: false
+	description: Focus on below window
+	dispatcher: __lua
+	arg: 221
+
+bindd
+	modmask: 64
+	submap:
+	key: LEFT
+	keycode: 0
+	catchall: false
+	description: Focus on left window
+	dispatcher: __lua
+	arg: 222
+
+bindd
+	modmask: 64
+	submap:
+	key: RIGHT
+	keycode: 0
+	catchall: false
+	description: Focus on right window
+	dispatcher: __lua
+	arg: 223
+
+bindd
+	modmask: 64
+	submap:
+	key: UP
+	keycode: 0
+	catchall: false
+	description: Focus on above window
+	dispatcher: __lua
+	arg: 224
+
+bindd
+	modmask: 64
+	submap:
+	key: MINUS
+	keycode: 0
+	catchall: false
+	description: Expand window left
+	dispatcher: __lua
+	arg: 225
+
+bindd
+	modmask: 64
+	submap:
+	key: EQUAL
+	keycode: 0
+	catchall: false
+	description: Shrink window left
+	dispatcher: __lua
+	arg: 226
+
+bindd
+	modmask: 64
+	submap:
+	key: S
+	keycode: 0
+	catchall: false
+	description: Toggle scratchpad
+	dispatcher: __lua
+	arg: 227
+
+bindd
+	modmask: 64
+	submap:
+	key: COMMA
+	keycode: 0
+	catchall: false
+	description: Dismiss last notification
+	dispatcher: __lua
+	arg: 228
+
+bindd
+	modmask: 64
+	submap:
+	key: BACKSPACE
+	keycode: 0
+	catchall: false
+	description: Toggle window transparency
+	dispatcher: __lua
+	arg: 229
+
+bindd
+	modmask: 64
+	submap:
+	key: Home
+	keycode: 0
+	catchall: false
+	description: Restore window width
+	dispatcher: __lua
+	arg: 230
+
+bindd
+	modmask: 64
+	submap:
+	key: L
+	keycode: 0
+	catchall: false
+	description: Toggle workspace layout
+	dispatcher: __lua
+	arg: 231
+
+bindd
+	modmask: 64
+	submap:
+	key: SLASH
+	keycode: 0
+	catchall: false
+	description: Monitor scaling up
+	dispatcher: __lua
+	arg: 232
+
+bindd
+	modmask: 64
+	submap:
+	key: G
+	keycode: 0
+	catchall: false
+	description: Toggle window grouping
+	dispatcher: __lua
+	arg: 233
+
+bindd
+	modmask: 64
+	submap:
+	key: mouse_up
+	keycode: 0
+	catchall: false
+	description: Scroll active workspace backward
+	dispatcher: __lua
+	arg: 234

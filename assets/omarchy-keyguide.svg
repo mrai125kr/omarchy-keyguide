@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Omarchy Keyguide</title>
+  <desc id="desc">A rounded keycap with a four-pane Super mark and three shortcut guide lines.</desc>
+  <path d="M26 12h76c14 0 22 8 22 22v60c0 14-8 22-22 22H26C12 116 4 108 4 94V34C4 20 12 12 26 12Z" fill="#171a20" stroke="#8fbfff" stroke-width="6"/>
+  <path d="M23 28h82c7 0 11 4 11 11v50c0 7-4 11-11 11H23c-7 0-11-4-11-11V39c0-7 4-11 11-11Z" fill="#242a33" stroke="#f2f2f2" stroke-opacity=".18" stroke-width="2"/>
+  <path d="M27 43 43 40v18H27V43Z" fill="#f2f2f2"/>
+  <path d="M47 39 64 36v22H47V39Z" fill="#8fbfff"/>
+  <path d="M27 62h16v18l-16-3V62Z" fill="#f2f2f2"/>
+  <path d="M47 62h17v22l-17-3V62Z" fill="#8fbfff"/>
+  <path d="M77 45h25" fill="none" stroke="#f2f2f2" stroke-width="6" stroke-linecap="round"/>
+  <path d="M77 63h25" fill="none" stroke="#8fbfff" stroke-width="6" stroke-linecap="round"/>
+  <path d="M77 81h18" fill="none" stroke="#f2f2f2" stroke-width="6" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "mrai.keyguide",
+  "name": "Omarchy Keyguide",
+  "version": "0.1.0",
+  "author": "mrai",
+  "license": "MIT",
+  "description": "Input-transparent shortcut HUD with safe editing for Omarchy bindings.",
+  "kinds": [
+    "service",
+    "overlay",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "src/plugin/Service.qml",
+    "overlay": "src/plugin/Settings.qml",
+    "barWidget": "src/plugin/BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Keyguide",
+    "description": "Shortcut HUD status, quick controls, and safe shortcut editing",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

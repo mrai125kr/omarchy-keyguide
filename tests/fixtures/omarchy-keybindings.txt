@@ -1,0 +1,48 @@
+SUPER + K                           → Keybindings
+SUPER + SPACE                       → Omarchy menu
+SUPER + RETURN                      → Terminal
+SUPER SHIFT + RETURN                → Browser
+SUPER + ESCAPE                      → System menu
+SUPER + F                           → Full screen
+SUPER ALT + F                       → Full width
+SUPER + W                           → Close window
+CTRL ALT + DELETE                   → Close all windows
+SUPER CTRL + L                      → Lock system
+SUPER + T                           → Toggle window floating/tiling
+SUPER + J                           → Toggle window split
+SUPER + O                           → Pop window out (float & pin)
+SUPER + C                           → Universal copy
+SUPER + V                           → Universal paste
+SUPER + X                           → Universal cut
+SUPER + PRINT                       → Color picker
+SUPER + 0                           → Switch to workspace 10
+SUPER + 1                           → Switch to workspace 1
+SUPER + 2                           → Switch to workspace 2
+SUPER + 3                           → Switch to workspace 3
+SUPER + 4                           → Switch to workspace 4
+SUPER + 5                           → Switch to workspace 5
+SUPER + 6                           → Switch to workspace 6
+SUPER + 7                           → Switch to workspace 7
+SUPER + 8                           → Switch to workspace 8
+SUPER + 9                           → Switch to workspace 9
+SUPER + TAB                         → Next workspace
+SUPER + DOWN                        → Focus on below window
+SUPER + LEFT                        → Focus on left window
+SUPER + RIGHT                       → Focus on right window
+SUPER + UP                          → Focus on above window
+SUPER + LEFT MOUSE BUTTON           → Move window
+SUPER + RIGHT MOUSE BUTTON          → Resize window
+SUPER + MINUS                       → Expand window left
+SUPER + EQUAL                       → Shrink window left
+SUPER + S                           → Toggle scratchpad
+SUPER + COMMA                       → Dismiss last notification
+SUPER + BACKSPACE                   → Toggle window transparency
+SUPER + Home                        → Restore window width
+SUPER + L                           → Toggle workspace layout
+SUPER + P                           → Pseudo window
+SUPER + SLASH                       → Monitor scaling up
+SUPER + G                           → Toggle window grouping
+SUPER + mouse_down                  → Scroll active workspace forward
+SUPER + mouse_up                    → Scroll active workspace backward
+SUPER + F12                         → Keyguide internal observer
+F9                                  → Start dictation (push-to-talk)

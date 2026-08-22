@@ -1,0 +1,8 @@
+SUPER + K → Keybindings	lua	hl.dsp.keybindings.show()
+SUPER + SPACE → Omarchy menu	lua	hl.dsp.menu.show()
+SUPER + RETURN → Terminal	exec	omarchy-launch-terminal
+SUPER SHIFT + RETURN → Browser	exec	omarchy-launch-browser
+SUPER + F → Full screen	lua	hl.dsp.window.fullscreen({ mode = "fullscreen" })
+SUPER + W → Close window	lua	hl.dsp.window.close()
+SUPER + LEFT MOUSE BUTTON → Move window	lua	hl.dsp.window.move({})
+SUPER + RIGHT MOUSE BUTTON → Resize window	lua	hl.dsp.window.resize({})

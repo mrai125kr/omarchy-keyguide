@@ -1,0 +1,13 @@
+.worktrees/
+.superpowers/
+__pycache__/
+/build/
+.env
+.env.*
+!.env.example
+*.key
+*.log
+*.p12
+*.pem
+.coverage
+/coverage/

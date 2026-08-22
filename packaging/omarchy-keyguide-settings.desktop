@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Omarchy Keyguide
+Comment=Configure the Omarchy shortcut guide
+Exec=omarchy shell shell summon mrai.keyguide
+Icon=omarchy-keyguide
+Terminal=false
+Categories=Settings;
