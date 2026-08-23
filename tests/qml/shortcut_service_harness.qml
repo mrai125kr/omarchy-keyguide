@@ -81,6 +81,8 @@ ShellRoot {
         id: "action-notes", title: "Notes", labelKey: "", selectionKind: "command",
         selectionId: "command:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         titleOverride: "My Notes", actionKind: "exec", launchKind: "webapp",
+        targetId: "webapp:https://notes.example/",
+        presentationId: "presentation-notes",
         modifiers: ["SUPER"], key: "N"
       }] : [],
       discoveryError: ""
@@ -223,9 +225,96 @@ ShellRoot {
         }
         if (semanticStatus.actions[0].selectionId !== "command:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             || semanticStatus.actions[0].launchKind !== "webapp"
+            || semanticStatus.actions[0].targetId !== "webapp:https://notes.example/"
+            || semanticStatus.actions[0].presentationId !== "presentation-notes"
             || semanticBindings[0].selection_kind !== "command"
             || semanticBindings[0].title_override !== "My Notes") {
           testRoot.fail("semantic binding metadata was discarded")
+          return
+        }
+        const classifiedStatusDocument = testRoot.statusDocument(1)
+        classifiedStatusDocument.actions[0].selectionKind = "action"
+        classifiedStatusDocument.actions[0].selectionId = "action-notes"
+        classifiedStatusDocument.actions[0].launchKind = "desktopApp"
+        classifiedStatusDocument.actions[0].targetId = "application:chromium.desktop"
+        classifiedStatusDocument.actions[0].displayKind = "desktopApp"
+        classifiedStatusDocument.actions[0].roleKind = "browser"
+        classifiedStatusDocument.actions[0].targetName = "Chromium"
+        let classifiedStatus
+        try {
+          classifiedStatus = testRoot.service.parseShortcutStatus(
+            classifiedStatusDocument)
+        } catch (error) {
+          testRoot.fail("classified action metadata was rejected: " + error)
+          return
+        }
+        if (classifiedStatus.actions[0].targetId !== "application:chromium.desktop"
+            || classifiedStatus.actions[0].launchKind !== "desktopApp"
+            || classifiedStatus.actions[0].displayKind !== "desktopApp"
+            || classifiedStatus.actions[0].roleKind !== "browser"
+            || classifiedStatus.actions[0].targetName !== "Chromium") {
+          testRoot.fail("classified action metadata was discarded")
+          return
+        }
+        const terminalAppStatusDocument = testRoot.statusDocument(1)
+        terminalAppStatusDocument.actions[0].selectionKind = "action"
+        terminalAppStatusDocument.actions[0].selectionId = "action-notes"
+        terminalAppStatusDocument.actions[0].launchKind = "cmd"
+        terminalAppStatusDocument.actions[0].targetId = "application:nvim.desktop"
+        terminalAppStatusDocument.actions[0].displayKind = "cmd"
+        terminalAppStatusDocument.actions[0].roleKind = "editor"
+        terminalAppStatusDocument.actions[0].targetName = "Neovim"
+        let terminalAppStatus
+        try {
+          terminalAppStatus = testRoot.service.parseShortcutStatus(
+            terminalAppStatusDocument)
+        } catch (error) {
+          testRoot.fail("terminal application metadata was rejected: " + error)
+          return
+        }
+        if (terminalAppStatus.actions[0].launchKind !== "cmd"
+            || terminalAppStatus.actions[0].displayKind !== "cmd"
+            || terminalAppStatus.actions[0].roleKind !== "editor") {
+          testRoot.fail("terminal application metadata was discarded")
+          return
+        }
+        const systemUiStatusDocument = testRoot.statusDocument(1)
+        systemUiStatusDocument.actions[0].selectionKind = "action"
+        systemUiStatusDocument.actions[0].selectionId = "action-bluetooth"
+        systemUiStatusDocument.actions[0].launchKind = ""
+        systemUiStatusDocument.actions[0].targetId = "action:bluetooth"
+        systemUiStatusDocument.actions[0].displayKind = "systemUi"
+        systemUiStatusDocument.actions[0].roleKind = ""
+        systemUiStatusDocument.actions[0].targetName = ""
+        let systemUiStatus
+        try {
+          systemUiStatus = testRoot.service.parseShortcutStatus(
+            systemUiStatusDocument)
+        } catch (error) {
+          testRoot.fail("system UI action metadata was rejected: " + error)
+          return
+        }
+        if (systemUiStatus.actions[0].displayKind !== "systemUi"
+            || systemUiStatus.actions[0].targetId !== "action:bluetooth") {
+          testRoot.fail("system UI action metadata was discarded")
+          return
+        }
+        const agentStatusDocument = testRoot.statusDocument(1)
+        agentStatusDocument.actions[0].agentName = "Codex"
+        const browserStatusDocument = testRoot.statusDocument(1)
+        browserStatusDocument.actions[0].browserName = "Chromium"
+        let namedAgentStatus
+        let namedBrowserStatus
+        try {
+          namedAgentStatus = testRoot.service.parseShortcutStatus(agentStatusDocument)
+          namedBrowserStatus = testRoot.service.parseShortcutStatus(browserStatusDocument)
+        } catch (error) {
+          testRoot.fail("registered application metadata was rejected: " + error)
+          return
+        }
+        if (namedAgentStatus.actions[0].agentName !== "Codex"
+            || namedBrowserStatus.actions[0].browserName !== "Chromium") {
+          testRoot.fail("registered application metadata was discarded")
           return
         }
         const invalidActionKind = testRoot.statusDocument(1)
@@ -240,6 +329,20 @@ ShellRoot {
           testRoot.fail("shortcut actionKind accepted a value outside exec/lua")
           return
         }
+        testRoot.service.shortcutMutationActive = true
+        const reloadAccepted = testRoot.service.handleCompositorEvent({
+          name: "configreloaded"
+        })
+        if (!reloadAccepted
+            || !testRoot.service.bindingsRefreshPending
+            || !testRoot.service.shortcutStatusRefreshPending
+            || testRoot.service.handleCompositorEvent({ name: "workspace" })) {
+          testRoot.fail("config reload did not queue one coherent binding/status refresh")
+          return
+        }
+        testRoot.service.shortcutMutationActive = false
+        testRoot.service.bindingsRefreshPending = false
+        testRoot.service.shortcutStatusRefreshPending = false
         testRoot.successfulAssignmentBindingsBaseline = testRoot.bindingsRefreshStarts
         testRoot.successfulAssignmentStatusBaseline = testRoot.statusRefreshStarts
         testRoot.mutationDeferredBindingsBaseline = testRoot.bindingsRefreshStarts

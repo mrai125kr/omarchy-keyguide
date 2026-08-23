@@ -12,6 +12,7 @@ import shlex
 import stat
 from typing import Iterable, Mapping
 import unicodedata
+from urllib.parse import urlsplit, urlunsplit
 
 from .settings import SUPPORTED_LANGUAGES
 
@@ -27,7 +28,6 @@ MAX_APPLICATIONS = 4096
 MAX_COMMANDS = 8192
 MAX_DIRECTORY_ENTRIES = 32768
 
-_DESKTOP_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.desktop$")
 _KEY = re.compile(r"^[A-Za-z][A-Za-z0-9-]*(?:\[[A-Za-z0-9_.@-]+\])?$")
 
 
@@ -54,6 +54,19 @@ class CatalogResolutionError(CatalogError):
     default_code = "catalog.selection_stale"
 
 
+def _valid_desktop_id(value: str) -> bool:
+    """Accept safe freedesktop IDs without rejecting human-readable filenames."""
+    return bool(
+        value
+        and len(value) <= MAX_FIELD_CHARACTERS
+        and value.endswith(".desktop")
+        and not value.startswith(".")
+        and ".." not in value
+        and "/" not in value
+        and not _has_control_characters(value)
+    )
+
+
 def is_valid_identity(kind: str, identity: str) -> bool:
     """Validate a stable identity without consulting mutable filesystem state."""
     if not isinstance(identity, str):
@@ -63,11 +76,7 @@ def is_valid_identity(kind: str, identity: str) -> bool:
         if not identity.startswith(prefix):
             return False
         desktop_id = identity[len(prefix):]
-        return bool(
-            _DESKTOP_ID.fullmatch(desktop_id)
-            and ".." not in desktop_id
-            and "/" not in desktop_id
-        )
+        return _valid_desktop_id(desktop_id)
     if kind == "command":
         return re.fullmatch(r"command:[0-9a-f]{64}", identity) is not None
     return False
@@ -83,6 +92,8 @@ class CatalogItem:
     icon: str
     path: str
     keywords: tuple[str, ...]
+    target_id: str
+    launch_kind: str
 
 
 @dataclass(frozen=True)
@@ -285,6 +296,52 @@ def _exec_focus_candidate(value: str) -> str:
     return candidate
 
 
+def webapp_target_id(value: str) -> str:
+    """Return a canonical presentation identity for a webapp Exec command."""
+    try:
+        tokens = shlex.split(value, posix=True)
+    except ValueError:
+        return ""
+    if not tokens:
+        return ""
+    launcher = Path(tokens[0]).name
+    if launcher == "omarchy-launch-webapp" and len(tokens) >= 2:
+        url = tokens[1]
+    elif launcher == "omarchy-launch-or-focus-webapp" and len(tokens) >= 3:
+        url = tokens[2]
+    else:
+        return ""
+    if len(url) > MAX_FIELD_CHARACTERS or _has_control_characters(url):
+        return ""
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return ""
+    scheme = parsed.scheme.lower()
+    hostname = (parsed.hostname or "").lower()
+    if (
+        scheme not in {"http", "https"}
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return ""
+    default_port = (scheme == "http" and port == 80) or (
+        scheme == "https" and port == 443
+    )
+    normalized_host = f"[{hostname}]" if ":" in hostname else hostname
+    netloc = (
+        normalized_host
+        if port is None or default_port
+        else f"{normalized_host}:{port}"
+    )
+    normalized = urlunsplit(
+        (scheme, netloc, parsed.path or "/", parsed.query, "")
+    )
+    return f"webapp:{normalized}"
+
+
 def _focus_pattern(values: Mapping[str, str], desktop_id: str) -> str:
     candidate = _bounded_text(values.get("StartupWMClass", ""), "StartupWMClass")
     if not candidate:
@@ -439,18 +496,49 @@ class CatalogDiscovery:
                     break
             if len(keyword_values) >= MAX_KEYWORDS:
                 break
+        application_id = f"application:{desktop_id}"
+        webapp_id = webapp_target_id(values.get("Exec", ""))
         return CatalogItem(
             kind="application",
-            id=f"application:{desktop_id}",
+            id=application_id,
             title=title,
             english_title=english_title,
             summary=summary,
             icon=icon,
             path="",
             keywords=tuple(keyword_values),
+            target_id=webapp_id or application_id,
+            launch_kind=(
+                "webapp" if webapp_id
+                else "cmd" if _truthy(values.get("Terminal", ""))
+                else "desktopApp"
+            ),
         )
 
+    def application_for_executable(
+        self, executable: str, language: str = "en"
+    ) -> CatalogItem | None:
+        """Find a visible desktop entry whose declared executable matches exactly."""
+        wanted = Path(str(executable or "").strip()).name
+        if not wanted:
+            return None
+        _by_id, by_executable = self.application_index(language)
+        return by_executable.get(wanted)
+
+    def application_index(
+        self, language: str = "en"
+    ) -> tuple[dict[str, CatalogItem], dict[str, CatalogItem]]:
+        """Index visible applications by stable ID and declared executable."""
+        applications, _warnings, by_executable = self._application_inventory(language)
+        return {item.id: item for item in applications}, by_executable
+
     def _applications(self, language: str) -> tuple[list[CatalogItem], list[str]]:
+        applications, warnings, _by_executable = self._application_inventory(language)
+        return applications, warnings
+
+    def _application_inventory(
+        self, language: str
+    ) -> tuple[list[CatalogItem], list[str], dict[str, CatalogItem]]:
         warnings: list[str] = []
         if not all(
             _is_regular_executable(path)
@@ -460,15 +548,17 @@ class CatalogDiscovery:
                 self._session_launcher,
             )
         ):
-            return [], ["application launcher is unavailable"]
+            return [], ["application launcher is unavailable"], {}
         claimed: set[str] = set()
         items: list[CatalogItem] = []
+        by_executable: dict[str, CatalogItem] = {}
+        ambiguous_executables: set[str] = set()
         for directory in self._application_directories():
             for desktop_id, path in self._desktop_files(directory):
                 if desktop_id in claimed:
                     continue
                 claimed.add(desktop_id)
-                if not _DESKTOP_ID.fullmatch(desktop_id) or ".." in desktop_id:
+                if not _valid_desktop_id(desktop_id):
                     warnings.append(f"invalid desktop identity: {desktop_id[:80]}")
                     continue
                 try:
@@ -481,17 +571,57 @@ class CatalogDiscovery:
                     continue
                 if item is not None:
                     items.append(item)
+                    candidates = (
+                        Path(values.get("TryExec", "").strip()).name,
+                        _exec_focus_candidate(values.get("Exec", "")),
+                    )
+                    for candidate in candidates:
+                        if not candidate or candidate in ambiguous_executables:
+                            continue
+                        existing = by_executable.get(candidate)
+                        if existing is None:
+                            by_executable[candidate] = item
+                        elif existing.id != item.id:
+                            by_executable.pop(candidate, None)
+                            ambiguous_executables.add(candidate)
                     if len(items) >= MAX_APPLICATIONS:
                         warnings.append("application result limit reached")
                         break
             if len(items) >= MAX_APPLICATIONS:
                 break
         items.sort(key=lambda item: (item.title.casefold(), item.id))
-        return items, warnings
+        return items, warnings, by_executable
 
-    def _commands(self) -> list[CatalogItem]:
+    def _application_command_names(
+        self, applications: Iterable[CatalogItem]
+    ) -> set[str]:
+        desktop_ids = {
+            item.id.removeprefix("application:")
+            for item in applications
+            if item.kind == "application"
+        }
+        names: set[str] = set()
+        claimed: set[str] = set()
+        for directory in self._application_directories():
+            for desktop_id, path in self._desktop_files(directory):
+                if desktop_id in claimed:
+                    continue
+                claimed.add(desktop_id)
+                if desktop_id not in desktop_ids:
+                    continue
+                try:
+                    values = _parse_desktop_entry(path)
+                    name = _exec_focus_candidate(values.get("Exec", ""))
+                except _InvalidDesktopEntry:
+                    continue
+                if name:
+                    names.add(name)
+        return names
+
+    def _commands(self, excluded_names: Iterable[str] = ()) -> list[CatalogItem]:
         items: list[CatalogItem] = []
         claimed_names: set[str] = set()
+        excluded = set(excluded_names)
         for directory in self._path_directories():
             try:
                 entries = sorted(os.scandir(directory), key=lambda item: item.name)
@@ -500,6 +630,8 @@ class CatalogDiscovery:
             for entry in entries[:MAX_DIRECTORY_ENTRIES]:
                 name = entry.name
                 if name in claimed_names:
+                    continue
+                if name in excluded or re.fullmatch(r"omarchy-install(?:-.*)?", name):
                     continue
                 path = Path(entry.path)
                 if not _is_regular_executable(path):
@@ -511,16 +643,19 @@ class CatalogDiscovery:
                 claimed_names.add(name)
                 absolute = str(path.absolute())
                 identity = hashlib.sha256(absolute.encode("utf-8")).hexdigest()
+                command_id = f"command:{identity}"
                 items.append(
                     CatalogItem(
                         kind="command",
-                        id=f"command:{identity}",
+                        id=command_id,
                         title=title,
                         english_title=title,
                         summary="",
                         icon="",
                         path=absolute,
                         keywords=(title,),
+                        target_id=command_id,
+                        launch_kind="command",
                     )
                 )
                 if len(items) >= MAX_COMMANDS:
@@ -585,7 +720,7 @@ class CatalogDiscovery:
         if language not in SUPPORTED_LANGUAGES:
             raise CatalogError("catalog language is not supported")
         applications, warnings = self._applications(language)
-        commands = self._commands()
+        commands = self._commands(self._application_command_names(applications))
         return CatalogSnapshot(
             fingerprint=self.fingerprint(),
             items=tuple(applications + commands),
@@ -647,7 +782,17 @@ class CatalogDiscovery:
         if kind == "command":
             if not is_valid_identity(kind, identity):
                 raise CatalogResolutionError("command identity is invalid")
-            item = next((item for item in self._commands() if item.id == identity), None)
+            applications, _warnings = self._applications("en")
+            item = next(
+                (
+                    item
+                    for item in self._commands(
+                        self._application_command_names(applications)
+                    )
+                    if item.id == identity
+                ),
+                None,
+            )
             if item is None:
                 raise CatalogResolutionError("command is no longer available")
             return ResolvedSelection(

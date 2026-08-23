@@ -44,7 +44,8 @@ ShellRoot {
       items: [{
         kind: "application", id: "application:demo.desktop",
         title: title, englishTitle: "Demo", summary: "A demo app",
-        icon: "demo-icon", path: "", keywords: ["Demo", title]
+        icon: "demo-icon", path: "", keywords: ["Demo", title],
+        targetId: "application:demo.desktop", launchKind: "desktopApp"
       }],
       warnings: []
     })

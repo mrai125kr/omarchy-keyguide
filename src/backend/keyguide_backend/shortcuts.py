@@ -350,13 +350,57 @@ def action_launch_kind(action: "ShortcutAction") -> str:
     """Classify launcher-backed actions that need an explicit picker badge."""
     if action.action_kind != "exec":
         return ""
-    try:
-        arguments = shlex.split(action.action_argument, posix=True)
-    except ValueError:
-        return ""
-    if arguments and Path(arguments[0]).name == "omarchy-launch-webapp":
+    if catalog.webapp_target_id(action.action_argument):
         return "webapp"
     return ""
+
+
+_AGENT_DISPLAY_NAMES = {
+    "pi": "Pi",
+    "omp": "Oh My Pi",
+    "opencode": "OpenCode",
+    "claude": "Claude Code",
+    "codex": "Codex",
+    "crush": "Crush",
+    "grok": "Grok",
+    "gemini": "Gemini",
+    "copilot": "GitHub Copilot",
+}
+
+_BROWSER_DISPLAY_NAMES = {
+    "chromium": "Chromium",
+    "chrome": "Chrome",
+    "brave": "Brave",
+    "brave-origin": "Brave Origin",
+    "edge": "Edge",
+    "firefox": "Firefox",
+    "zen": "Zen",
+}
+
+_BROWSER_DESKTOP_IDS = {
+    "chromium": "chromium.desktop",
+    "chrome": "google-chrome.desktop",
+    "brave": "brave-browser.desktop",
+    "brave-origin": "brave-origin.desktop",
+    "edge": "microsoft-edge.desktop",
+    "firefox": "firefox.desktop",
+    "zen": "zen.desktop",
+}
+
+_EDITOR_DISPLAY_NAMES = {
+    "code": "VSCode",
+    "cursor": "Cursor",
+    "zeditor": "Zed",
+    "zed": "Zed",
+    "sublime_text": "Sublime Text",
+    "helix": "Helix",
+    "hx": "Helix",
+    "vim": "Vim",
+    "emacs": "Emacs",
+    "nvim": "Neovim",
+}
+
+_TERMINAL_EDITORS = {"nvim", "vim", "nano", "micro", "hx", "helix", "fresh"}
 
 
 def _lua_string(value: str) -> str:
@@ -1318,6 +1362,324 @@ class ShortcutManager:
         except BaseException:
             os.close(descriptor)
             raise
+
+    def _default_agent_name(self) -> str:
+        path = self.home / ".config" / "omarchy" / "defaults" / "agent"
+        descriptor = -1
+        try:
+            descriptor = os.open(
+                path,
+                os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+            )
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_size > 64
+                or info.st_uid != os.getuid()
+            ):
+                return ""
+            data = os.read(descriptor, 65)
+            if len(data) > 64:
+                return ""
+            value = data.decode("utf-8").strip()
+        except (OSError, UnicodeError):
+            return ""
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        return _AGENT_DISPLAY_NAMES.get(value, "")
+
+    @staticmethod
+    def _is_agent_action(action: ShortcutAction) -> bool:
+        if action.action_kind != "exec":
+            return False
+        try:
+            command = shlex.split(action.action_argument, posix=True)
+        except ValueError:
+            return False
+        return bool(command and Path(command[0]).name == "omarchy-agent")
+
+    def _default_browser_details(
+        self, applications_by_id: dict[str, catalog.CatalogItem]
+    ) -> tuple[str, str]:
+        try:
+            desktop_id = str(self.runner(
+                ("env", "-u", "BROWSER", "xdg-settings", "get", "default-web-browser")
+            ) or "").strip()
+        except (OSError, subprocess.SubprocessError):
+            desktop_id = ""
+        value = ""
+        if not desktop_id.endswith(".desktop"):
+            try:
+                value = str(self.runner(("omarchy-default-browser",)) or "").strip()
+            except (OSError, subprocess.SubprocessError):
+                return "", ""
+            desktop_id = (
+                value if value.endswith(".desktop")
+                else _BROWSER_DESKTOP_IDS.get(value, "")
+            )
+        target_id = f"application:{desktop_id}" if desktop_id else ""
+        key = value or desktop_id.removesuffix(".desktop")
+        name = _BROWSER_DISPLAY_NAMES.get(key, "")
+        if not name and target_id:
+            application = applications_by_id.get(target_id)
+            name = application.title if application is not None else ""
+        if not name and desktop_id:
+            name = desktop_id.removesuffix(".desktop").replace("-", " ").title()
+        return name, target_id
+
+    @staticmethod
+    def _is_browser_action(action: ShortcutAction) -> bool:
+        if action.action_kind != "exec":
+            return False
+        try:
+            command = shlex.split(action.action_argument, posix=True)
+        except ValueError:
+            return False
+        return bool(command and Path(command[0]).name == "omarchy-launch-browser")
+
+    @staticmethod
+    def _is_plain_browser_action(action: ShortcutAction) -> bool:
+        if action.action_kind != "exec":
+            return False
+        try:
+            command = shlex.split(action.action_argument, posix=True)
+        except ValueError:
+            return False
+        return len(command) == 1 and Path(command[0]).name == "omarchy-launch-browser"
+
+    @staticmethod
+    def _is_editor_action(action: ShortcutAction) -> bool:
+        if action.action_kind != "exec":
+            return False
+        try:
+            command = shlex.split(action.action_argument, posix=True)
+        except ValueError:
+            return False
+        return bool(command and Path(command[0]).name == "omarchy-launch-editor")
+
+    @staticmethod
+    def _is_plain_editor_action(action: ShortcutAction) -> bool:
+        if action.action_kind != "exec":
+            return False
+        try:
+            command = shlex.split(action.action_argument, posix=True)
+        except ValueError:
+            return False
+        return len(command) == 1 and Path(command[0]).name == "omarchy-launch-editor"
+
+    def _default_editor_details(
+        self, applications_by_executable: dict[str, catalog.CatalogItem]
+    ) -> tuple[str, str, str]:
+        try:
+            value = str(self.runner(("omarchy-default-editor",)) or "").strip()
+        except (OSError, subprocess.SubprocessError):
+            return "", "", ""
+        executable = Path(value).name
+        if not executable:
+            return "", "", ""
+        application = applications_by_executable.get(executable)
+        name = (
+            application.title if application is not None
+            else _EDITOR_DISPLAY_NAMES.get(executable, executable)
+        )
+        editor_slug = re.sub(
+            r"[^a-z0-9]+", "-", executable.casefold()
+        ).strip("-")
+        target_id = (
+            application.target_id if application is not None
+            else f"editor:{editor_slug}" if editor_slug
+            else ""
+        )
+        display_kind = (
+            application.launch_kind if application is not None
+            else "cmd" if executable in _TERMINAL_EDITORS
+            else "desktopApp"
+        )
+        return name, target_id, display_kind
+
+    @staticmethod
+    def _opens_system_ui(action: ShortcutAction) -> bool:
+        """Return whether an exec opens an interactive desktop surface.
+
+        Classification follows executable shapes instead of translated labels so
+        newly discovered bindings inherit the same rule. Direct state changes,
+        print-only helpers, and malformed near-matches intentionally stay actions.
+        """
+        if action.action_kind != "exec":
+            return False
+        try:
+            command = shlex.split(action.action_argument, posix=True)
+        except ValueError:
+            return False
+        if not command:
+            return False
+
+        launcher = Path(command[0]).name
+        arguments = command[1:]
+        print_only_flags = {"--help", "-h", "--print", "-p"}
+
+        if launcher == "omarchy-shell":
+            shell_surface = (
+                len(command) >= 4
+                and command[1] == "shell"
+                and command[2] in {"toggle", "summon"}
+                and bool(command[3])
+                and not command[3].startswith("-")
+            )
+            notification_surface = (
+                len(command) >= 3
+                and command[1] == "notifications"
+                and command[2] == "showHistory"
+            )
+            return shell_surface or notification_surface
+
+        if launcher == "omarchy-menu":
+            verb = arguments[0] if arguments else "toggle"
+            return verb in {"toggle", "summon"}
+
+        if launcher.startswith("omarchy-menu-"):
+            return not any(argument in print_only_flags for argument in arguments)
+
+        if launcher == "omarchy-toggle-bar":
+            return len(arguments) <= 1 and (
+                not arguments or arguments[0] in {"toggle", "on", "off"}
+            )
+
+        if launcher == "omarchy-capture-text":
+            return not arguments
+
+        if launcher == "omarchy-reminder":
+            return bool(arguments and arguments[0] in {"-i", "--interactive"})
+
+        if launcher == "omarchy-transcode":
+            positional_count = 0
+            index = 0
+            while index < len(arguments):
+                argument = arguments[index]
+                if argument in {"--help", "-h"}:
+                    return False
+                if argument == "--path":
+                    if index + 1 >= len(arguments):
+                        return False
+                    index += 2
+                    continue
+                if argument == "--":
+                    positional_count += len(arguments) - index - 1
+                    break
+                if argument.startswith("-"):
+                    return False
+                positional_count += 1
+                index += 1
+            return positional_count < 3
+
+        command_starts = {0}
+        shell_operators = {"&&", "||", ";", "|"}
+        for index, token in enumerate(command[:-1]):
+            if token in shell_operators:
+                command_starts.add(index + 1)
+        return any(
+            Path(command[index]).name in {"hyprpicker", "slurp"}
+            for index in command_starts
+        )
+
+    @staticmethod
+    def _opens_terminal(action: ShortcutAction) -> bool:
+        if action.action_kind != "exec":
+            return False
+        try:
+            command = shlex.split(action.action_argument, posix=True)
+        except ValueError:
+            return False
+        if not command:
+            return False
+        launcher = Path(command[0]).name
+        return (
+            launcher == "xdg-terminal-exec"
+            or launcher == "omarchy-launch-tui"
+            or launcher == "omarchy-launch-or-focus-tui"
+            or launcher == "omarchy-launch-floating-terminal-with-presentation"
+            or launcher.startswith("omarchy-launch-terminal")
+        )
+
+    @classmethod
+    def _application_executable_candidates(
+        cls, action: ShortcutAction, *, depth: int = 0
+    ) -> tuple[str, ...]:
+        """Extract app executables only from supported native launch shapes."""
+        if action.action_kind != "exec" or depth > 3:
+            return ()
+        try:
+            command = shlex.split(action.action_argument, posix=True)
+        except ValueError:
+            return ()
+        if not command:
+            return ()
+        launcher = Path(command[0]).name
+        if launcher == "uwsm-app":
+            try:
+                separator = command.index("--")
+            except ValueError:
+                return ()
+            if separator + 1 >= len(command):
+                return ()
+            return (Path(command[separator + 1]).name,)
+        if launcher == "omarchy-launch-or-focus":
+            if len(command) < 3:
+                return ()
+            nested = replace(action, action_argument=command[2])
+            return cls._application_executable_candidates(nested, depth=depth + 1)
+        prefix = "omarchy-launch-"
+        if not launcher.startswith(prefix):
+            return (launcher,) if len(command) == 1 else ()
+        candidate = launcher[len(prefix):]
+        while candidate.endswith("-cwd"):
+            candidate = candidate[:-4]
+        blocked = {
+            "browser", "editor", "or-focus", "or-focus-tui", "tui",
+            "webapp", "or-focus-webapp", "floating-terminal-with-presentation",
+        }
+        if not candidate or candidate in blocked or candidate.startswith("terminal"):
+            return ()
+        return (candidate, candidate + "-desktop")
+
+    def _application_for_action(
+        self,
+        action: ShortcutAction,
+        applications_by_executable: dict[str, catalog.CatalogItem],
+    ) -> catalog.CatalogItem | None:
+        for executable in self._application_executable_candidates(action):
+            application = applications_by_executable.get(executable)
+            if application is not None:
+                return application
+        return None
+
+    def _action_target_id(
+        self,
+        item: _CatalogAction,
+        selection_kind: str,
+        selection_id: str,
+        agent_name: str,
+        browser_target_id: str,
+        editor_target_id: str,
+        application_target_id: str,
+    ) -> str:
+        webapp_id = catalog.webapp_target_id(item.action.action_argument)
+        if webapp_id:
+            return webapp_id
+        if selection_kind == "application" and application_target_id:
+            return application_target_id
+        if selection_kind in {"application", "command"} and selection_id:
+            return selection_id
+        if agent_name and self._is_agent_action(item.action):
+            return "agent:" + re.sub(r"[^a-z0-9]+", "-", agent_name.casefold()).strip("-")
+        if browser_target_id and self._is_plain_browser_action(item.action):
+            return browser_target_id
+        if editor_target_id and self._is_plain_editor_action(item.action):
+            return editor_target_id
+        if application_target_id:
+            return application_target_id
+        return f"action:{item.id}"
 
     @contextmanager
     def _locked(self):
@@ -2501,35 +2863,125 @@ class ShortcutManager:
 
         catalog = self._catalog_actions(state, active, runtime)
         catalog_by_chord = {item.action.chord: item for item in catalog}
-        actions = [
-            {
+        applications_by_id, applications_by_executable = (
+            self.catalog_discovery.application_index("en")
+        )
+        default_agent_name = self._default_agent_name()
+        default_browser_name, default_browser_target_id = (
+            self._default_browser_details(applications_by_id)
+            if any(self._is_browser_action(item.action) for item in catalog)
+            else ("", "")
+        )
+        default_editor_name, default_editor_target_id, default_editor_display_kind = (
+            self._default_editor_details(applications_by_executable)
+            if any(self._is_editor_action(item.action) for item in catalog)
+            else ("", "", "")
+        )
+        def status_action(item: _CatalogAction) -> dict[str, Any]:
+            selection_kind = (
+                item.entry.selection_kind
+                if item.entry is not None and item.entry.selection_kind
+                else "action"
+            )
+            selection_id = (
+                item.entry.selection_id
+                if item.entry is not None and item.entry.selection_id
+                else item.id
+            )
+            is_agent = bool(default_agent_name and self._is_agent_action(item.action))
+            is_browser = bool(
+                default_browser_name and self._is_browser_action(item.action)
+            )
+            is_editor = bool(
+                default_editor_name and self._is_editor_action(item.action)
+            )
+            launch_kind = action_launch_kind(item.action)
+            application = None
+            if selection_kind == "application" and selection_id:
+                application = applications_by_id.get(selection_id)
+            if application is None and not launch_kind:
+                application = self._application_for_action(
+                    item.action, applications_by_executable
+                )
+            resolved_launch_kind = (
+                launch_kind
+                or (application.launch_kind if application is not None else "")
+            )
+            if is_agent:
+                display_kind, role_kind, target_name = "cmd", "agent", default_agent_name
+            elif is_browser:
+                display_kind, role_kind, target_name = (
+                    "desktopApp",
+                    "browser",
+                    default_browser_name
+                    if self._is_plain_browser_action(item.action) else "",
+                )
+            elif is_editor:
+                display_kind, role_kind, target_name = (
+                    default_editor_display_kind,
+                    "editor",
+                    default_editor_name
+                    if self._is_plain_editor_action(item.action) else "",
+                )
+            elif launch_kind == "webapp":
+                display_kind, role_kind, target_name = "webapp", "", ""
+            elif application is not None:
+                display_kind, role_kind, target_name = (
+                    application.launch_kind,
+                    "",
+                    application.title,
+                )
+            elif selection_kind == "command":
+                display_kind, role_kind, target_name = "action", "", ""
+            elif self._opens_terminal(item.action):
+                display_kind, role_kind, target_name = "cmd", "", ""
+            elif self._opens_system_ui(item.action):
+                display_kind, role_kind, target_name = "systemUi", "", ""
+            else:
+                display_kind, role_kind, target_name = "action", "", ""
+            return {
                 "id": item.id,
+                "presentationId": item.binding.presentation_id,
                 "title": item.action.description,
                 "labelKey": (
                     item.entry.label_key
                     if item.entry is not None
                     else action_label_key(item.action.description)
                 ),
-                "selectionKind": (
-                    item.entry.selection_kind
-                    if item.entry is not None and item.entry.selection_kind
-                    else "action"
-                ),
-                "selectionId": (
-                    item.entry.selection_id
-                    if item.entry is not None and item.entry.selection_id
-                    else item.id
-                ),
+                "selectionKind": selection_kind,
+                "selectionId": selection_id,
                 "titleOverride": (
                     item.entry.title_override if item.entry is not None else ""
                 ),
                 "actionKind": item.action.action_kind,
-                "launchKind": action_launch_kind(item.action),
+                "launchKind": resolved_launch_kind,
+                "displayKind": display_kind,
+                "roleKind": role_kind,
+                "targetName": target_name,
+                "targetId": self._action_target_id(
+                    item,
+                    selection_kind,
+                    selection_id,
+                    default_agent_name,
+                    default_browser_target_id,
+                    default_editor_target_id,
+                    application.target_id if application is not None else "",
+                ),
+                **(
+                    {"agentName": default_agent_name}
+                    if default_agent_name and self._is_agent_action(item.action)
+                    else {}
+                ),
+                **(
+                    {"browserName": default_browser_name}
+                    if default_browser_name and self._is_browser_action(item.action)
+                    else {}
+                ),
                 "modifiers": list(item.action.modifiers),
                 "key": item.action.key,
             }
-            for item in catalog
-        ]
+
+        actions = [status_action(item) for item in catalog]
 
         key_options: dict[str, list[dict[str, Any]]] = {}
         for group in SUPER_GROUPS:

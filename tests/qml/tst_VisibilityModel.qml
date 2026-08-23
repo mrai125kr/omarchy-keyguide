@@ -107,6 +107,271 @@ TestCase {
     verify(assignedOptions.every(function(option) { return !option.selectable }))
   }
 
+  function test_registered_filter_is_empty_until_query_or_group_is_selected() {
+    verify(typeof VisibilityModel.registeredBindings === "function",
+           "registered shortcut filtering is missing")
+    const source = [
+      {
+        id: "browser", presentation_id: "action-browser",
+        modifiers: ["SUPER"], key: "B", description: "Chromium"
+      }
+    ]
+
+    const result = VisibilityModel.registeredBindings(
+      source, [], "", "", "ko")
+
+    compare(result.length, 0)
+    compare(source.length, 1)
+  }
+
+  function test_registered_group_filter_matches_the_exact_modifier_group() {
+    verify(typeof VisibilityModel.registeredBindings === "function",
+           "registered shortcut filtering is missing")
+    const source = [
+      {
+        id: "plain", presentation_id: "action-plain",
+        modifiers: ["SUPER"], key: "A", description: "Plain"
+      },
+      {
+        id: "control", presentation_id: "action-control",
+        modifiers: ["SUPER", "CTRL"], key: "A", description: "Control"
+      }
+    ]
+
+    const result = VisibilityModel.registeredBindings(
+      source, [], "", "SUPER", "en")
+
+    compare(result.map(function(item) { return item.id }).join(","), "plain")
+  }
+
+  function test_registered_query_searches_title_chord_type_and_role_in_all_groups() {
+    verify(typeof VisibilityModel.registeredBindings === "function",
+           "registered shortcut filtering is missing")
+    const source = [
+      {
+        id: "bluetooth", presentation_id: "action-bluetooth",
+        modifiers: ["SUPER", "CTRL"], key: "B", description: "Bluetooth"
+      },
+      {
+        id: "browser", presentation_id: "action-browser",
+        modifiers: ["SUPER", "SHIFT"], key: "RETURN", description: "Browser"
+      }
+    ]
+    const actions = [
+      {
+        id: "action-bluetooth", title: "Bluetooth",
+        displayKind: "systemUi", roleKind: "", targetName: ""
+      },
+      {
+        id: "action-browser", title: "Browser",
+        displayKind: "desktopApp", roleKind: "browser", targetName: "Chromium"
+      }
+    ]
+
+    const byKoreanType = VisibilityModel.registeredBindings(
+      source, actions, "시스템 UI", "", "ko")
+    const byRole = VisibilityModel.registeredBindings(
+      source, actions, "browser", "", "en")
+    const byChord = VisibilityModel.registeredBindings(
+      source, actions, "shift return", "", "en")
+
+    compare(byKoreanType.map(function(item) { return item.id }).join(","),
+            "bluetooth")
+    compare(byRole.map(function(item) { return item.id }).join(","), "browser")
+    compare(byChord.map(function(item) { return item.id }).join(","), "browser")
+    compare(byKoreanType[0].displayKind, "systemUi")
+    compare(byRole[0].targetName, "Chromium")
+  }
+
+  function test_registered_query_and_group_are_combined_as_an_intersection() {
+    verify(typeof VisibilityModel.registeredBindings === "function",
+           "registered shortcut filtering is missing")
+    const source = [
+      {
+        id: "plain-browser", presentation_id: "action-plain-browser",
+        modifiers: ["SUPER"], key: "B", description: "Browser"
+      },
+      {
+        id: "control-browser", presentation_id: "action-control-browser",
+        modifiers: ["SUPER", "CTRL"], key: "B", description: "Browser"
+      },
+      {
+        id: "control-audio", presentation_id: "action-control-audio",
+        modifiers: ["SUPER", "CTRL"], key: "A", description: "Audio"
+      }
+    ]
+
+    const result = VisibilityModel.registeredBindings(
+      source, [], "browser", "SUPER+CTRL", "en")
+
+    compare(result.map(function(item) { return item.id }).join(","),
+            "control-browser")
+  }
+
+  function test_presented_agent_uses_the_concrete_target_name_and_cmd_icon() {
+    verify(typeof VisibilityModel.presentedBindings === "function",
+           "shared binding presentation is missing")
+    if (typeof VisibilityModel.presentedBindings !== "function")
+      return
+    const bindings = [{
+      id: "agent-binding", presentation_id: "agent-binding",
+      modifiers: ["SUPER", "CTRL", "SHIFT"], key: "A",
+      description: "Agent", label_key: "action.agent"
+    }]
+    const actions = [{
+      id: "action-agent", modifiers: ["SUPER", "CTRL", "SHIFT"], key: "A",
+      title: "Agent", labelKey: "action.agent", targetName: "Codex",
+      agentName: "Codex", targetId: "agent:codex",
+      displayKind: "cmd", roleKind: "agent"
+    }]
+
+    const result = VisibilityModel.presentedBindings(
+      bindings, actions, [], "ko")
+
+    compare(result.length, 1)
+    compare(result[0].description, "Codex")
+    compare(result[0].displayKind, "cmd")
+    compare(result[0].roleKind, "agent")
+    compare(result[0].icon, "utilities-terminal")
+  }
+
+  function test_enriched_action_does_not_join_a_new_binding_by_chord() {
+    const bindings = [{
+      id: "new-binding", presentation_id: "new-presentation",
+      modifiers: ["SUPER", "CTRL", "SHIFT"], key: "A",
+      description: "New action", label_key: ""
+    }]
+    const staleActions = [{
+      id: "old-action", presentationId: "old-presentation",
+      modifiers: ["SUPER", "CTRL", "SHIFT"], key: "A",
+      title: "Agent", targetName: "Codex", agentName: "Codex",
+      targetId: "agent:codex", displayKind: "cmd", roleKind: "agent"
+    }]
+
+    const result = VisibilityModel.presentedBindings(
+      bindings, staleActions, [], "en")
+
+    compare(result.length, 1)
+    compare(result[0].description, "New action")
+    compare(result[0].displayKind, "action")
+    compare(result[0].roleKind, "")
+  }
+
+  function test_presented_apps_resolve_icons_by_exact_target_identity() {
+    verify(typeof VisibilityModel.presentedBindings === "function",
+           "shared binding presentation is missing")
+    if (typeof VisibilityModel.presentedBindings !== "function")
+      return
+    const bindings = [
+      {
+        id: "chatgpt", presentation_id: "action-chatgpt",
+        modifiers: ["SUPER"], key: "A", description: "ChatGPT",
+        selection_kind: "application",
+        selection_id: "application:chatgpt.desktop"
+      },
+      {
+        id: "youtube", presentation_id: "action-youtube",
+        modifiers: ["SUPER", "SHIFT"], key: "Y", description: "YouTube"
+      }
+    ]
+    const actions = [
+      {
+        id: "action-chatgpt", modifiers: ["SUPER"], key: "A",
+        title: "ChatGPT", targetName: "ChatGPT",
+        targetId: "application:chatgpt.desktop",
+        displayKind: "desktopApp", roleKind: ""
+      },
+      {
+        id: "action-youtube", modifiers: ["SUPER", "SHIFT"], key: "Y",
+        title: "YouTube", targetId: "webapp:https://youtube.com/",
+        displayKind: "webapp", roleKind: ""
+      }
+    ]
+    const catalog = [
+      {
+        id: "application:wrong-youtube.desktop", title: "YouTube",
+        targetId: "application:wrong-youtube.desktop", icon: "wrong-icon"
+      },
+      {
+        id: "application:chatgpt.desktop", title: "ChatGPT",
+        targetId: "application:chatgpt.desktop", icon: "chatgpt"
+      },
+      {
+        id: "application:YouTube.desktop", title: "YouTube",
+        targetId: "webapp:https://youtube.com/", icon: "youtube"
+      }
+    ]
+
+    const result = VisibilityModel.presentedBindings(
+      bindings, actions, catalog, "en")
+
+    compare(result.length, 2)
+    compare(result[0].icon, "chatgpt")
+    compare(result[1].icon, "youtube")
+  }
+
+  function test_registered_titles_follow_the_selected_language_but_keep_app_names() {
+    verify(typeof VisibilityModel.registeredBindings === "function",
+           "registered shortcut filtering is missing")
+    const source = [
+      {
+        id: "terminal", presentation_id: "action-terminal",
+        modifiers: ["SUPER"], key: "RETURN", description: "Terminal",
+        label_key: "action.terminal"
+      },
+      {
+        id: "chatgpt", presentation_id: "action-chatgpt",
+        modifiers: ["SUPER"], key: "A", description: "ChatGPT",
+        label_key: ""
+      },
+      {
+        id: "custom-terminal", presentation_id: "action-custom-terminal",
+        modifiers: ["SUPER"], key: "T", description: "작업 터미널",
+        label_key: "action.terminal", title_override: "작업 터미널"
+      }
+    ]
+    const actions = [
+      {
+        id: "action-terminal", title: "Terminal",
+        labelKey: "action.terminal", displayKind: "cmd"
+      },
+      {
+        id: "action-chatgpt", title: "ChatGPT",
+        labelKey: "", displayKind: "desktopApp", targetName: "ChatGPT"
+      },
+      {
+        id: "action-custom-terminal", title: "작업 터미널",
+        labelKey: "action.terminal", titleOverride: "작업 터미널",
+        displayKind: "cmd"
+      }
+    ]
+
+    const result = VisibilityModel.registeredBindings(
+      source, actions, "a", "SUPER", "ko")
+
+    compare(result.length, 3)
+    compare(result[0].description, "터미널")
+    compare(result[1].description, "ChatGPT")
+    compare(result[2].description, "작업 터미널")
+  }
+
+  function test_action_type_presentation_is_shared_by_search_and_registered_rows() {
+    verify(typeof VisibilityModel.typeBadgeKey === "function",
+           "shared action type labels are missing")
+    verify(typeof VisibilityModel.typeAccent === "function",
+           "shared action type colors are missing")
+
+    compare(VisibilityModel.typeBadgeKey("desktopApp"), "search.desktopAppBadge")
+    compare(VisibilityModel.typeBadgeKey("webapp"), "search.webAppBadge")
+    compare(VisibilityModel.typeBadgeKey("cmd"), "search.cmdBadge")
+    compare(VisibilityModel.typeBadgeKey("action"), "search.actionBadge")
+    compare(VisibilityModel.typeBadgeKey("systemUi"), "search.systemUiBadge")
+    compare(VisibilityModel.typeAccent("desktopApp", true, "#123456"), "#1557b0")
+    compare(VisibilityModel.typeAccent("desktopApp", false, "#123456"), "#82b1ff")
+    compare(VisibilityModel.typeAccent("systemUi", true, "#123456"), "#9b174c")
+    compare(VisibilityModel.typeAccent("unknown", false, "#123456"), "#123456")
+  }
+
   function test_disabling_master_preserves_partial_hidden_selection() {
     const settings = {
       groups: groupOptions.slice(),

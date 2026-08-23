@@ -158,6 +158,10 @@ ShellRoot {
               modifiers: ["SUPER"], key: "V", description: "Vendor Tool",
               mouse: false, label_key: "vendor.unknown", selection_kind: "",
               selection_id: "", title_override: "" },
+            { id: "agent-localized", presentation_id: "agent-localized",
+              modifiers: ["SUPER", "CTRL", "SHIFT"], key: "A",
+              description: "Agent", mouse: false, label_key: "action.agent",
+              selection_kind: "", selection_id: "", title_override: "" },
             { id: "override-localized", presentation_id: "override-localized",
               modifiers: ["SUPER"], key: "N", description: "Original name",
               mouse: false, label_key: "action.browser", selection_kind: "action",
@@ -169,21 +173,36 @@ ShellRoot {
             fingerprint: "display-test",
             warnings: [],
             items: [
-              { id: "application:demo", kind: "application", title: "デモアプリ" }
+              { id: "application:demo", kind: "application", title: "デモアプリ",
+                targetId: "application:demo", icon: "demo-icon" }
             ]
           }
+          testRoot.service.shortcutStatus = Object.assign(
+            {}, testRoot.service.shortcutStatus, { actions: [{
+              id: "action-agent", modifiers: ["SUPER", "CTRL", "SHIFT"],
+              key: "A", title: "Agent", labelKey: "action.agent",
+              targetName: "Codex", agentName: "Codex", targetId: "agent:codex",
+              displayKind: "cmd", roleKind: "agent", titleOverride: ""
+            }] })
           testRoot.service.settings = Object.assign(
             {}, testRoot.service.settings, { language: "ja" })
           if (!("displayBindings" in testRoot.service)
               || testRoot.service.displayBindings.map(function(binding) {
                 return binding.description
-              }).join("|") !== "ターミナル|画面の明るさを下げる|ワークスペース10に切り替え|デモアプリ|Vendor Tool|내 이름") {
+              }).join("|") !== "ターミナル|画面の明るさを下げる|ワークスペース10に切り替え|デモアプリ|Vendor Tool|Codex|내 이름") {
             testRoot.fail("display-time binding descriptions did not follow locale precedence")
+            return
+          }
+          if (testRoot.service.displayBindings[3].icon !== "demo-icon"
+              || testRoot.service.displayBindings[5].icon !== "utilities-terminal"
+              || testRoot.service.displayBindings[5].displayKind !== "cmd"
+              || testRoot.service.displayBindings[5].roleKind !== "agent") {
+            testRoot.fail("shared icon, type, and role presentation did not reach the HUD model")
             return
           }
           if (rawBindings.map(function(binding) {
                 return binding.description
-              }).join("|") !== "Terminal|Brightness down|Switch to workspace 10|Demo App|Vendor Tool|Original name") {
+              }).join("|") !== "Terminal|Brightness down|Switch to workspace 10|Demo App|Vendor Tool|Agent|Original name") {
             testRoot.fail("display-time localization mutated canonical bindings")
             return
           }

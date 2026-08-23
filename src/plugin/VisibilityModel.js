@@ -2,6 +2,7 @@
 .import "I18n.js" as I18n
 
 const modifierOrder = ["SUPER", "CTRL", "SHIFT", "ALT"]
+const displayKinds = ["desktopApp", "webapp", "cmd", "action", "systemUi"]
 
 function arrayFrom(value) {
   if (!Array.isArray(value)) return []
@@ -72,6 +73,208 @@ function chordLabel(modifiers, key, language) {
     return part.length > 0
   })
   return chord.join(" + ")
+}
+
+function normalizedSearchText(value) {
+  let result = String(value || "")
+  if (typeof result.normalize === "function")
+    result = result.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  return result.toLocaleLowerCase().replace(/[+\-_./:]+/g, " ")
+    .trim().replace(/\s+/g, " ")
+}
+
+function normalizedDisplayKind(value) {
+  const kind = String(value || "")
+  if (kind === "command") return "action"
+  return displayKinds.indexOf(kind) === -1 ? "action" : kind
+}
+
+function typeBadgeKey(kind) {
+  switch (normalizedDisplayKind(kind)) {
+  case "desktopApp": return "search.desktopAppBadge"
+  case "webapp": return "search.webAppBadge"
+  case "cmd": return "search.cmdBadge"
+  case "systemUi": return "search.systemUiBadge"
+  default: return "search.actionBadge"
+  }
+}
+
+function typeAccent(kind, light, fallback) {
+  switch (String(kind || "")) {
+  case "desktopApp": return light ? "#1557b0" : "#82b1ff"
+  case "webapp": return light ? "#006b5d" : "#54e1c1"
+  case "cmd": return light ? "#8a4300" : "#ffc266"
+  case "action": return light ? "#6c2b96" : "#d6a5ff"
+  case "systemUi": return light ? "#9b174c" : "#ff8fb8"
+  default: return fallback
+  }
+}
+
+function roleBadgeKey(kind) {
+  switch (String(kind || "")) {
+  case "agent": return "search.agentBadge"
+  case "browser": return "search.browserBadge"
+  case "editor": return "search.editorBadge"
+  default: return ""
+  }
+}
+
+function fallbackIcon(displayKind, roleKind, browserName) {
+  if (String(roleKind || "") === "browser") {
+    const browserIcons = {
+      Chromium: "chromium", Chrome: "google-chrome",
+      Brave: "brave-browser", "Brave Origin": "brave-browser",
+      Edge: "microsoft-edge", Firefox: "firefox", Zen: "zen-browser"
+    }
+    return browserIcons[String(browserName || "")] || "web-browser"
+  }
+  switch (String(displayKind || "")) {
+  case "webapp": return "applications-internet"
+  case "command":
+  case "cmd": return "utilities-terminal"
+  case "desktopApp": return "application-x-executable"
+  default: return "preferences-system"
+  }
+}
+
+function fallbackIconGlyph(displayKind) {
+  switch (normalizedDisplayKind(displayKind)) {
+  case "cmd": return ">_"
+  case "webapp": return "@"
+  case "desktopApp": return "A"
+  case "systemUi": return "*"
+  default: return "+"
+  }
+}
+
+function actionIndexes(actions) {
+  const byId = {}
+  const byPresentationId = {}
+  const byChord = {}
+  arrayFrom(actions).forEach(function(action) {
+    const id = String(action && action.id || "")
+    if (id && byId[id] === undefined) byId[id] = action
+    const stablePresentationId = String(action && action.presentationId || "")
+    if (stablePresentationId
+        && byPresentationId[stablePresentationId] === undefined)
+      byPresentationId[stablePresentationId] = action
+    const group = bindingGroup(action)
+    const key = String(action && action.key || "")
+    const chord = group && key ? group + "|" + key : ""
+    if (!stablePresentationId && chord && byChord[chord] === undefined)
+      byChord[chord] = action
+  })
+  return {
+    byId: byId,
+    byPresentationId: byPresentationId,
+    byChord: byChord
+  }
+}
+
+function actionForBinding(indexes, binding) {
+  const stablePresentationId = presentationId(binding)
+  const direct = indexes.byPresentationId[stablePresentationId]
+    || indexes.byId[stablePresentationId]
+  if (direct) return direct
+  const group = bindingGroup(binding)
+  const key = String(binding && binding.key || "")
+  return indexes.byChord[group && key ? group + "|" + key : ""] || null
+}
+
+function catalogByTargetId(items) {
+  const result = {}
+  arrayFrom(items).forEach(function(item) {
+    const id = String(item && item.id || "")
+    const targetId = String(item && item.targetId || id)
+    if (targetId && result[targetId] === undefined) result[targetId] = item
+    if (id && result[id] === undefined) result[id] = item
+  })
+  return result
+}
+
+function registeredBinding(binding, action, catalogMap, language) {
+  const result = Object.assign({}, binding || {})
+  const selectedApplication = String(result.selection_kind || "") === "application"
+  const displayKind = String(action && action.displayKind || "")
+    || (selectedApplication ? "desktopApp" : "action")
+  result.displayKind = normalizedDisplayKind(displayKind)
+  result.roleKind = String(action && action.roleKind || "")
+  result.targetName = String(action && action.targetName || "")
+  result.agentName = String(action && action.agentName || "")
+  result.browserName = String(action && action.browserName || "")
+  result.launchKind = String(action && action.launchKind || "")
+  result.labelKey = String(action && action.labelKey || result.label_key || "")
+  result.targetId = String(action && action.targetId
+    || result.selection_id || "")
+  const catalogItem = catalogMap[result.targetId] || null
+  result.titleOverride = String(result.title_override
+    || action && action.titleOverride || "")
+  const localizedAction = I18n.actionTitle(
+    language, result.labelKey, String(result.description || ""))
+  const concreteName = String(catalogItem && catalogItem.title
+    || result.targetName
+    || (result.roleKind === "agent" ? result.agentName : "")
+    || (result.roleKind === "browser" ? result.browserName : "")
+    || "")
+  result.description = result.titleOverride || concreteName || localizedAction
+  result.icon = String(catalogItem && catalogItem.icon || "")
+    || fallbackIcon(result.displayKind, result.roleKind, result.browserName)
+  return result
+}
+
+function presentedBindings(bindings, actions, catalogItems, language) {
+  const indexes = actionIndexes(actions)
+  const catalogMap = catalogByTargetId(catalogItems)
+  return arrayFrom(bindings).map(function(binding) {
+    return registeredBinding(
+      binding, actionForBinding(indexes, binding), catalogMap, language)
+  })
+}
+
+function registeredSearchFields(binding, language) {
+  const kind = normalizedDisplayKind(binding && binding.displayKind)
+  const roleKey = roleBadgeKey(binding && binding.roleKind)
+  const fallback = String(binding && binding.description || "")
+  const labelKey = String(binding && binding.labelKey
+    || I18n.actionKey(fallback) || "")
+  const localizedTitle = I18n.actionTitle(language, labelKey, fallback)
+  const englishTitle = I18n.actionTitle("en", labelKey, fallback)
+  return [
+    localizedTitle, englishTitle, fallback,
+    chordLabel(binding && binding.modifiers, binding && binding.key, language),
+    chordLabel(binding && binding.modifiers, binding && binding.key, "en"),
+    bindingGroup(binding), String(binding && binding.key || ""),
+    I18n.text(language, typeBadgeKey(kind), {}),
+    I18n.text("en", typeBadgeKey(kind), {}),
+    roleKey ? I18n.text(language, roleKey, {}) : "",
+    roleKey ? I18n.text("en", roleKey, {}) : "",
+    String(binding && binding.targetName || ""),
+    String(binding && binding.agentName || ""),
+    String(binding && binding.browserName || ""),
+    String(binding && binding.selection_id || ""),
+    String(binding && binding.action_argument || "")
+  ]
+}
+
+function registeredBindings(bindings, actions, query, group, language,
+                            catalogItems) {
+  const requestedGroup = String(group || "")
+  const normalizedQuery = normalizedSearchText(query)
+  if (!requestedGroup && !normalizedQuery) return []
+
+  const queryParts = normalizedQuery.split(" ").filter(function(part) {
+    return part.length > 0
+  })
+  return presentedBindings(bindings, actions, catalogItems, language).filter(function(binding) {
+    return !requestedGroup || bindingGroup(binding) === requestedGroup
+  }).filter(function(binding) {
+    if (queryParts.length === 0) return true
+    const haystack = normalizedSearchText(
+      registeredSearchFields(binding, language).join(" "))
+    return queryParts.every(function(part) {
+      return haystack.indexOf(part) !== -1
+    })
+  })
 }
 
 function actionOptions(status, targetOption, language) {

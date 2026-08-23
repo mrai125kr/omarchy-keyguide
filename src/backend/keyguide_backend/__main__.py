@@ -167,6 +167,8 @@ def main() -> int:
                         "icon": item.icon,
                         "path": item.path,
                         "keywords": list(item.keywords),
+                        "targetId": item.target_id,
+                        "launchKind": item.launch_kind,
                     }
                     for item in snapshot.items
                 ],

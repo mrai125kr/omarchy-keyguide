@@ -130,7 +130,8 @@ ShellRoot {
       boundedProcessCommandPrefix: boundedProcessPrefix,
       settingsPath: "",
       observerCommand: ["/usr/bin/python3", "-c", "import time; print('{\"super\":true,\"ctrl\":true,\"shift\":false,\"alt\":false,\"actionPressed\":false,\"wheelPulse\":0}', flush=True); time.sleep(30)"],
-      bindingsCommand: ["/usr/bin/printf", "[{\"id\":\"terminal\",\"presentation_id\":\"terminal\",\"modifiers\":[\"SUPER\",\"CTRL\"],\"key\":\"RETURN\",\"description\":\"Terminal\",\"dispatcher\":\"exec\",\"argument\":\"terminal\",\"mouse\":false,\"editable\":true,\"action_kind\":\"exec\",\"action_argument\":\"terminal\",\"edit_reason\":\"\"},{\"id\":\"browser\",\"presentation_id\":\"browser\",\"modifiers\":[\"SUPER\"],\"key\":\"B\",\"description\":\"Browser\",\"dispatcher\":\"exec\",\"argument\":\"browser\",\"mouse\":false,\"editable\":true,\"action_kind\":\"exec\",\"action_argument\":\"browser\",\"edit_reason\":\"\"}]"],
+      bindingsCommand: ["/usr/bin/printf", "[{\"id\":\"agent\",\"presentation_id\":\"agent\",\"modifiers\":[\"SUPER\",\"CTRL\"],\"key\":\"C\",\"description\":\"Agent\",\"dispatcher\":\"exec\",\"argument\":\"codex\",\"mouse\":false,\"editable\":true,\"action_kind\":\"exec\",\"action_argument\":\"codex\",\"edit_reason\":\"\",\"label_key\":\"action.agent\",\"selection_kind\":\"action\",\"selection_id\":\"action:agent\",\"title_override\":\"\"},{\"id\":\"browser\",\"presentation_id\":\"browser\",\"modifiers\":[\"SUPER\"],\"key\":\"B\",\"description\":\"Browser\",\"dispatcher\":\"exec\",\"argument\":\"browser\",\"mouse\":false,\"editable\":true,\"action_kind\":\"exec\",\"action_argument\":\"browser\",\"edit_reason\":\"\"}]"],
+      shortcutsStatusCommand: ["/usr/bin/printf", "{\"version\":3,\"managedCount\":0,\"managedBindingIds\":[],\"keyOptionsByGroup\":{\"SUPER\":[],\"SUPER+CTRL\":[],\"SUPER+SHIFT\":[],\"SUPER+ALT\":[],\"SUPER+CTRL+SHIFT\":[],\"SUPER+CTRL+ALT\":[],\"SUPER+SHIFT+ALT\":[],\"SUPER+CTRL+SHIFT+ALT\":[]},\"actions\":[{\"id\":\"agent\",\"title\":\"Agent\",\"actionKind\":\"exec\",\"modifiers\":[\"SUPER\",\"CTRL\"],\"key\":\"C\",\"labelKey\":\"action.agent\",\"selectionKind\":\"action\",\"selectionId\":\"action:agent\",\"titleOverride\":\"\",\"launchKind\":\"cmd\",\"targetId\":\"agent:codex\",\"displayKind\":\"cmd\",\"roleKind\":\"agent\",\"targetName\":\"Codex\",\"agentName\":\"Codex\"}],\"discoveryError\":\"\"}"],
       settingsCommand: ["/usr/bin/printf", "{\"version\":2,\"enabled\":true,\"position\":\"center\",\"scale\":1.0,\"opacity\":0.94,\"groups\":[\"SUPER+CTRL\"],\"hiddenBindingIds\":[],\"followTheme\":false,\"language\":\"en\"}"]
     })
     if (!service)
@@ -162,8 +163,26 @@ ShellRoot {
           testRoot.fail("Service modifiers did not propagate to Hud.qml")
           return
         }
-        if (testRoot.hud.bindings.length !== 1 || testRoot.hud.bindings[0].id !== "terminal") {
+        if (testRoot.hud.bindings.length !== 1 || testRoot.hud.bindings[0].id !== "agent") {
           testRoot.fail("filtered Service bindings did not propagate to Hud.qml")
+          return
+        }
+        const presentationIcon = testRoot.findNamed(
+          testRoot.hud, "hudPresentationIcon-agent", 0)
+        const presentationTitle = testRoot.findNamed(
+          testRoot.hud, "hudDescription-agent", 0)
+        const typeBadgeLabel = testRoot.findNamed(
+          testRoot.hud, "hudTypeBadgeLabel-agent", 0)
+        if (!presentationIcon || !String(presentationIcon.source || "")) {
+          testRoot.fail("live HUD did not show the shared presentation icon")
+          return
+        }
+        if (!presentationTitle || String(presentationTitle.text) !== "Codex") {
+          testRoot.fail("live HUD did not show the concrete target name")
+          return
+        }
+        if (!typeBadgeLabel || String(typeBadgeLabel.text) !== "CMD") {
+          testRoot.fail("live HUD did not show exactly one type badge")
           return
         }
         testRoot.service.settings = Object.assign(
@@ -256,6 +275,33 @@ ShellRoot {
             || testRoot.hud.cardRight > testRoot.hud.width
             || testRoot.hud.cardBottom > testRoot.hud.height) {
           testRoot.fail("42-row minimum-scale HUD escaped the rendered screen")
+          return
+        }
+        if (testRoot.hud.columnCount < 2) {
+          testRoot.fail("42-row HUD did not produce the multi-column layout under test")
+          return
+        }
+        const nextColumnIndex = testRoot.hud.rowsPerColumn
+        const firstColumnBadge = testRoot.findNamed(
+          testRoot.hud, "hudTypeBadge-many-0", 0)
+        const nextColumnDescription = testRoot.findNamed(
+          testRoot.hud, "hudDescription-many-" + nextColumnIndex, 0)
+        const nextColumnKeyChip = nextColumnDescription
+          ? testRoot.findKeyChip(nextColumnDescription.parent, 0) : null
+        const multiColumnCard = testRoot.findBorderSurface(testRoot.hud, 0)
+        if (!firstColumnBadge || !nextColumnKeyChip || !multiColumnCard) {
+          testRoot.fail("could not inspect the gap between adjacent HUD columns")
+          return
+        }
+        const badgePoint = firstColumnBadge.mapToItem(multiColumnCard, 0, 0)
+        const nextKeyPoint = nextColumnKeyChip.mapToItem(multiColumnCard, 0, 0)
+        const adjacentColumnGap = nextKeyPoint.x
+          - (badgePoint.x + firstColumnBadge.width)
+        if (adjacentColumnGap < 21) {
+          testRoot.fail(
+            "adjacent HUD columns left only " + adjacentColumnGap
+              + "px between the previous type badge and next shortcut; expected at least 21px at 0.75 scale"
+          )
           return
         }
         lockService.locked = true

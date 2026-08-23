@@ -18,6 +18,7 @@ from keyguide_backend import __main__ as cli
 from keyguide_backend.catalog import (
     CatalogDiscovery,
     CatalogResolutionError,
+    webapp_target_id,
 )
 
 
@@ -215,6 +216,48 @@ class CatalogDiscoveryTests(unittest.TestCase):
         self.assertTrue(all(item.id.startswith("command:") for item in items))
         self.assertTrue(all(item.icon == "" for item in items))
 
+    def test_visible_application_suppresses_its_duplicate_path_command(self) -> None:
+        """A desktop application must not be repeated as an advanced command."""
+        self.make_command(self.path_one / "chatgpt")
+        self.write_user(
+            "chatgpt.desktop",
+            desktop("ChatGPT", Exec="chatgpt %U"),
+        )
+
+        items = self.discovery().snapshot("en").items
+
+        self.assertEqual(
+            [("application", "ChatGPT")],
+            [(item.kind, item.title) for item in items],
+        )
+
+    def test_hidden_application_does_not_suppress_a_direct_command(self) -> None:
+        """Only an application the user can select may claim its command name."""
+        self.make_command(self.path_one / "hidden-tool")
+        self.write_user(
+            "hidden-tool.desktop",
+            desktop("Hidden Tool", Exec="hidden-tool", NoDisplay="true"),
+        )
+
+        commands = [
+            item.title for item in self.discovery().snapshot("en").items
+            if item.kind == "command"
+        ]
+
+        self.assertEqual(["hidden-tool"], commands)
+
+    def test_omarchy_install_helpers_are_not_assignable_commands(self) -> None:
+        """Internal installers must not be offered as user shortcut actions."""
+        self.make_command(self.path_one / "omarchy-install-ai-chatgpt")
+        self.make_command(self.path_one / "useful-command")
+
+        commands = [
+            item.title for item in self.discovery().snapshot("en").items
+            if item.kind == "command"
+        ]
+
+        self.assertEqual(["useful-command"], commands)
+
     def test_non_regular_non_executable_and_symlink_commands_are_ignored(self) -> None:
         (self.path_one / "directory").mkdir()
         self.make_command(self.path_one / "not-executable", executable=False)
@@ -398,7 +441,7 @@ class CatalogDiscoveryTests(unittest.TestCase):
         self.assertEqual(
             {
                 "kind", "id", "title", "english_title", "summary",
-                "icon", "path", "keywords",
+                "icon", "path", "keywords", "target_id", "launch_kind",
             },
             set(asdict(item)),
         )
@@ -406,6 +449,133 @@ class CatalogDiscoveryTests(unittest.TestCase):
             "command:" + hashlib.sha256(str(command).encode()).hexdigest(),
             item.id,
         )
+        self.assertEqual(item.id, item.target_id)
+        self.assertEqual("command", item.launch_kind)
+
+    def test_application_target_identity_distinguishes_native_and_webapp(self) -> None:
+        self.write_user("native.desktop", desktop("ChatGPT", Exec="chatgpt"))
+        self.write_user(
+            "youtube.desktop",
+            desktop(
+                "YouTube",
+                Exec="omarchy-launch-webapp 'HTTPS://YouTube.COM'",
+            ),
+        )
+
+        items = {
+            item.title: item for item in self.discovery().snapshot("en").items
+            if item.kind == "application"
+        }
+
+        self.assertEqual("application:native.desktop", items["ChatGPT"].target_id)
+        self.assertEqual("desktopApp", items["ChatGPT"].launch_kind)
+        self.assertEqual(
+            "webapp:https://youtube.com/", items["YouTube"].target_id
+        )
+        self.assertEqual("webapp", items["YouTube"].launch_kind)
+
+    def test_safe_spaced_desktop_id_is_visible_and_resolvable(self) -> None:
+        """Installed apps with human-readable filenames must not disappear."""
+        self.write_user(
+            "Google Maps.desktop",
+            desktop("Google Maps", Exec="omarchy-launch-webapp https://maps.google.com"),
+        )
+
+        discovery = self.discovery()
+        applications = [
+            item for item in discovery.snapshot("en").items
+            if item.kind == "application"
+        ]
+
+        self.assertEqual(
+            [("application:Google Maps.desktop", "Google Maps")],
+            [(item.id, item.title) for item in applications],
+        )
+        resolved = discovery.resolve(
+            "application", "application:Google Maps.desktop"
+        )
+        self.assertIn("Google Maps.desktop", resolved.arguments)
+
+    def test_focus_webapp_launcher_uses_the_canonical_url_identity(self) -> None:
+        """Focus wrappers and direct launchers must classify the same web app."""
+        self.write_user(
+            "maps.desktop",
+            desktop(
+                "Google Maps",
+                Exec=(
+                    "omarchy-launch-or-focus-webapp 'Google Maps' "
+                    "'HTTPS://Maps.Google.COM'"
+                ),
+            ),
+        )
+
+        item = next(
+            item for item in self.discovery().snapshot("en").items
+            if item.kind == "application"
+        )
+
+        self.assertEqual("webapp:https://maps.google.com/", item.target_id)
+        self.assertEqual("webapp", item.launch_kind)
+
+    def test_webapp_identity_preserves_ipv6_host_brackets(self) -> None:
+        """IPv6 host syntax must remain unambiguous after normalization."""
+        address_with_port = webapp_target_id(
+            "omarchy-launch-webapp 'https://[::1]:3000/'"
+        )
+        address_without_port = webapp_target_id(
+            "omarchy-launch-webapp 'https://[::1:3000]/'"
+        )
+
+        self.assertEqual("webapp:https://[::1]:3000/", address_with_port)
+        self.assertEqual("webapp:https://[::1:3000]/", address_without_port)
+        self.assertNotEqual(address_with_port, address_without_port)
+
+    def test_malformed_focus_webapp_url_does_not_claim_webapp_identity(self) -> None:
+        """Malformed and credential-bearing URLs must stay outside webapp identity."""
+        self.write_user(
+            "bad.desktop",
+            desktop(
+                "Bad Maps",
+                Exec="omarchy-launch-or-focus-webapp 'Bad Maps' 'https://u:p@maps.test'",
+            ),
+        )
+
+        item = next(
+            item for item in self.discovery().snapshot("en").items
+            if item.kind == "application"
+        )
+
+        self.assertEqual("application:bad.desktop", item.target_id)
+        self.assertEqual("desktopApp", item.launch_kind)
+
+    def test_terminal_desktop_entry_is_cmd_and_matches_its_executable(self) -> None:
+        self.make_command(self.path_one / "nvim")
+        self.write_user(
+            "nvim.desktop",
+            desktop("Neovim", Exec="nvim %F", TryExec="nvim", Terminal="true"),
+        )
+
+        discovery = self.discovery()
+        item = discovery.application_for_executable("nvim")
+
+        self.assertIsNotNone(item)
+        assert item is not None
+        self.assertEqual("application:nvim.desktop", item.target_id)
+        self.assertEqual("cmd", item.launch_kind)
+
+    def test_ambiguous_application_executable_is_not_resolved(self) -> None:
+        """One executable cannot prove which of multiple desktop apps is intended."""
+        self.write_user("demo-one.desktop", desktop("Demo One", Exec="demo"))
+        self.write_user("demo-two.desktop", desktop("Demo Two", Exec="demo"))
+
+        discovery = self.discovery()
+        applications_by_id, applications_by_executable = (
+            discovery.application_index()
+        )
+
+        self.assertEqual(2, len(applications_by_id))
+        self.assertNotIn("demo", applications_by_executable)
+        self.assertIsNone(discovery.application_for_executable("demo"))
 
 
 class CatalogCliTests(unittest.TestCase):
@@ -455,7 +625,7 @@ class CatalogCliTests(unittest.TestCase):
             self.assertEqual(
                 {
                     "kind", "id", "title", "englishTitle", "summary",
-                    "icon", "path", "keywords",
+                    "icon", "path", "keywords", "targetId", "launchKind",
                 },
                 set(payload["items"][0]),
             )

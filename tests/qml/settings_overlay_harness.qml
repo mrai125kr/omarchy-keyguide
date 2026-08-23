@@ -46,6 +46,16 @@ ShellRoot {
         editable: false, action_kind: "", action_argument: "",
         edit_reason: "Action cannot be reconstructed", selection_kind: "",
         selection_id: "", label_key: "", title_override: ""
+      },
+      {
+        id: "chatgpt-id", presentation_id: "action-chatgpt",
+        modifiers: ["SUPER", "SHIFT"], key: "A", description: "ChatGPT",
+        dispatcher: "exec", argument: "gtk-launch chatgpt.desktop", mouse: false,
+        editable: true, action_kind: "exec",
+        action_argument: "gtk-launch chatgpt.desktop", edit_reason: "",
+        selection_kind: "application",
+        selection_id: "application:chatgpt.desktop", label_key: "",
+        title_override: ""
       }
     ]
     property var shortcutStatus: ({
@@ -83,13 +93,22 @@ ShellRoot {
           id: "action-terminal", title: "Terminal",
           labelKey: "action.terminal", selectionKind: "action",
           selectionId: "action-terminal", titleOverride: "",
-          actionKind: "exec", modifiers: ["SUPER"], key: "RETURN"
+          actionKind: "exec", displayKind: "cmd", roleKind: "",
+          targetName: "", modifiers: ["SUPER"], key: "RETURN"
         },
         {
           id: "action-screenshot", title: "Screenshot",
           labelKey: "action.screenshot", selectionKind: "action",
           selectionId: "action-screenshot", titleOverride: "",
           actionKind: "exec", modifiers: ["SUPER", "SHIFT"], key: "S"
+        },
+        {
+          id: "action-chatgpt", title: "ChatGPT", labelKey: "",
+          selectionKind: "application",
+          selectionId: "application:chatgpt.desktop", titleOverride: "",
+          actionKind: "exec", displayKind: "desktopApp", roleKind: "",
+          targetId: "application:chatgpt.desktop", targetName: "ChatGPT",
+          modifiers: ["SUPER", "SHIFT"], key: "A"
         }
       ],
       discoveryError: ""
@@ -102,6 +121,12 @@ ShellRoot {
           kind: "application", id: "application:org.demo.App.desktop",
           title: "Demo App", englishTitle: "Demo App", summary: "Friendly app",
           icon: "application-x-executable", path: "", keywords: ["demo"]
+        },
+        {
+          kind: "application", id: "application:chatgpt.desktop",
+          title: "ChatGPT", englishTitle: "ChatGPT", summary: "AI assistant",
+          icon: "chatgpt", path: "", keywords: ["ChatGPT"],
+          targetId: "application:chatgpt.desktop", launchKind: "desktopApp"
         },
         {
           kind: "command", id: "command:true", title: "true",
@@ -233,6 +258,8 @@ ShellRoot {
       "settingsOpacityPreset50", "settingsOpacityPreset75",
       "settingsOpacityPreset90", "settingsOpacityPreset100", "settingsOpacityInput",
       "shortcutManagementTitle", "shortcutGroupPicker", "shortcutKeyPicker",
+      "shortcutRegisteredFilter", "shortcutRegisteredSearchInput",
+      "shortcutRegisteredGroup-SUPER",
       "shortcutActionSearch", "shortcutActionSearchInput",
       "shortcutAssignmentPopupScrim", "shortcutAssignmentPopup",
       "shortcutAssignmentTitle", "shortcutAssignmentPreview",
@@ -326,7 +353,69 @@ ShellRoot {
     return !popup.visible && !scrim.visible
   }
 
-  function assertLocale(language, title, management, save, placeholder) {
+  function assertRegisteredFiltering() {
+    const searchInput = requireNamed("shortcutRegisteredSearchInput")
+    const idle = requireNamed("shortcutRegisteredFilterIdle")
+    if (!searchInput || !idle)
+      return false
+    if (testRoot.settingsOverlay.registeredSearchQuery !== ""
+        || testRoot.settingsOverlay.registeredFilterGroup !== ""
+        || testRoot.settingsOverlay.registeredBindings.length !== 0
+        || findNamed(testRoot.settingsOverlay, "shortcutBindingRow-terminal-id", 0)) {
+      testRoot.fail("registered shortcuts were visible before a filter was chosen")
+      return false
+    }
+
+    testRoot.settingsOverlay.registeredSearchQuery = "terminal"
+    if (testRoot.settingsOverlay.registeredBindings.length !== 1
+        || testRoot.settingsOverlay.registeredBindings[0].id !== "terminal-id") {
+      testRoot.fail("registered title search did not scan all modifier groups")
+      return false
+    }
+    const row = requireNamed("shortcutBindingRow-terminal-id")
+    const badge = row ? findNamed(row, "bindingTypeBadgeLabel", 0) : null
+    if (!row || !badge || badge.text !== "CMD") {
+      testRoot.fail("registered result did not show its shared CMD type badge")
+      return false
+    }
+
+    testRoot.settingsOverlay.registeredSearchQuery = "chatgpt"
+    if (testRoot.settingsOverlay.registeredBindings.length !== 1
+        || testRoot.settingsOverlay.registeredBindings[0].id !== "chatgpt-id"
+        || testRoot.settingsOverlay.registeredBindings[0].icon !== "chatgpt") {
+      testRoot.fail("registered app did not resolve its exact catalog icon")
+      return false
+    }
+    const appRow = requireNamed("shortcutBindingRow-chatgpt-id")
+    const appIcon = appRow
+      ? findNamed(appRow, "bindingPresentationIcon", 0) : null
+    if (!appRow || !appIcon || String(appIcon.source || "") === "") {
+      testRoot.fail("registered app icon did not reach the visible row")
+      return false
+    }
+
+    testRoot.settingsOverlay.registeredSearchQuery = ""
+    if (!testRoot.settingsOverlay.selectRegisteredGroup("SUPER")
+        || testRoot.settingsOverlay.registeredBindings.length !== 2
+        || testRoot.settingsOverlay.registeredBindings.map(function(binding) {
+          return binding.id
+        }).join(",") !== "launcher-id,terminal-id") {
+      testRoot.fail("registered modifier chip did not show its exact group")
+      return false
+    }
+    if (!testRoot.settingsOverlay.selectRegisteredGroup("SUPER")
+        || testRoot.settingsOverlay.registeredFilterGroup !== ""
+        || testRoot.settingsOverlay.registeredBindings.length !== 0) {
+      testRoot.fail("selected registered modifier chip did not toggle off")
+      return false
+    }
+
+    testRoot.settingsOverlay.registeredSearchQuery = "terminal"
+    return true
+  }
+
+  function assertLocale(language, title, management, save, placeholder,
+                        registeredTitle, typeRoleColumn) {
     if (!testRoot.settingsOverlay.updatePending("language", language)) {
       testRoot.fail("language could not be selected: " + language)
       return false
@@ -335,13 +424,26 @@ ShellRoot {
     const managementText = requireNamed("shortcutManagementTitle")
     const saveButton = requireNamed("settingsSaveButton")
     const searchInput = requireNamed("shortcutActionSearchInput")
-    if (!titleText || !managementText || !saveButton || !searchInput)
+    const registeredRow = requireNamed("shortcutBindingRow-terminal-id")
+    const typeRoleHeader = requireNamed("shortcutTypeRoleHeader")
+    const previewTitle = requireNamed("hudPreviewDescription-terminal-id")
+    const previewIcon = requireNamed("hudPreviewPresentationIcon-terminal-id")
+    if (!titleText || !managementText || !saveButton || !searchInput
+        || !registeredRow || !typeRoleHeader || !previewTitle || !previewIcon)
       return false
     if (titleText.text !== title || managementText.text !== management
-        || saveButton.text !== save || searchInput.placeholderText !== placeholder) {
+        || saveButton.text !== save || searchInput.placeholderText !== placeholder
+        || String(registeredRow.bindingData.description || "")
+          !== registeredTitle
+        || String(typeRoleHeader.text || "") !== typeRoleColumn
+        || String(previewTitle.text || "") !== registeredTitle
+        || String(previewIcon.source || "") === "") {
       testRoot.fail("locale did not update the complete Settings surface: " + language
         + " title=" + titleText.text + " management=" + managementText.text
-        + " save=" + saveButton.text + " search=" + searchInput.placeholderText)
+        + " save=" + saveButton.text + " search=" + searchInput.placeholderText
+        + " registered=" + String(registeredRow.bindingData.description || "")
+        + " typeRole=" + String(typeRoleHeader.text || "")
+        + " preview=" + String(previewTitle.text || ""))
       return false
     }
     testRoot.settingsOverlay.shortcutEditorError = testRoot.settingsOverlay.t(
@@ -358,19 +460,19 @@ ShellRoot {
   function assertEveryLocale() {
     return assertLocale(
       "ko", "Omarchy 키가이드", "단축키 관리", "저장",
-      "앱, 액션 또는 명령 검색")
+      "앱 또는 행동 검색", "터미널", "유형 / 역할")
       && assertLocale(
         "ja", "Omarchy キーガイド", "ショートカット管理", "保存",
-        "アプリ、アクション、コマンドを検索")
+        "アプリまたは操作を検索", "ターミナル", "種類 / 役割")
       && assertLocale(
         "zh_CN", "Omarchy 快捷键指南", "快捷键管理", "保存",
-        "搜索应用、操作或命令")
+        "搜索应用或操作", "终端", "类型 / 角色")
       && assertLocale(
         "es", "Guía de teclas de Omarchy", "Gestión de atajos", "Guardar",
-        "Busca aplicaciones, acciones o comandos")
+        "Busca aplicaciones o acciones", "Terminal", "Tipo / Rol")
       && assertLocale(
         "en", "Omarchy Keyguide", "Shortcut management", "Save",
-        "Search apps, actions, or commands")
+        "Search apps or actions", "Terminal", "Type / Role")
   }
 
   function assertVisibilityAndKeyCapture() {
@@ -497,8 +599,8 @@ ShellRoot {
     }
 
     testRoot.settingsOverlay.cancelAssignment()
-    if (fakeService.actionCatalogWatching) {
-      testRoot.fail("closing search left catalog watching active")
+    if (!fakeService.actionCatalogWatching) {
+      testRoot.fail("closing search stopped the Settings-wide catalog watcher")
       return false
     }
     return true
@@ -533,9 +635,29 @@ ShellRoot {
 
   function assertFriendlyPresentationControls() {
     const card = requireNamed("settingsCard")
+    const header = requireNamed("shortcutListHeader")
+    const row = requireNamed("shortcutBindingRow-terminal-id")
+    const chordCell = row ? findNamed(row, "bindingChordCell", 0) : null
+    const typeRoleHeader = requireNamed("shortcutTypeRoleHeader")
+    const typeRoleCell = row ? findNamed(row, "bindingTypeRoleCell", 0) : null
+    const visibility = row ? findNamed(row, "bindingVisibilityTarget", 0) : null
     if (!card || testRoot.settingsOverlay.settingsCardLogicalWidth !== 960
         || card.width > testRoot.settingsOverlay.settingsCardTargetWidth + 1) {
-      testRoot.fail("Settings card still uses the unnecessarily wide layout")
+      testRoot.fail("Settings card does not use the five-column logical width")
+      return false
+    }
+    if (!header || !chordCell || !typeRoleHeader || !typeRoleCell || !visibility
+        || header.chordWidth !== 316
+        || chordCell.width !== header.chordWidth) {
+      testRoot.fail("registered header and rows do not share the reduced shortcut column")
+      return false
+    }
+    const typeRoleX = typeRoleCell.mapToItem(row, 0, 0).x
+    const hudX = visibility.mapToItem(row, 0, 0).x
+    if (Math.abs(typeRoleHeader.x - typeRoleX) > 0.01
+        || Math.abs(typeRoleHeader.width - typeRoleCell.width) > 0.01
+        || Math.abs(hudX - typeRoleX - typeRoleCell.width - 24) > 0.01) {
+      testRoot.fail("type/role header, row column, and HUD gutter are not aligned")
       return false
     }
     if (findNamed(testRoot.settingsOverlay, "settingsScaleSlider", 0)
@@ -644,7 +766,12 @@ ShellRoot {
       if (testRoot.phase === 0) {
         if (!testRoot.settingsOverlay.keyboardFocusExclusive)
           return
+        if (!fakeService.actionCatalogWatching) {
+          testRoot.fail("opening Settings did not start catalog watching")
+          return
+        }
         if (!testRoot.assertRequiredSurface()
+            || !testRoot.assertRegisteredFiltering()
             || !testRoot.assertContextualAssignmentPopup()
             || !testRoot.assertEveryLocale()
             || !testRoot.assertVisibilityAndKeyCapture()
@@ -691,7 +818,10 @@ ShellRoot {
           return
         if (testRoot.settingsOverlay.uiLanguage !== "es"
             || title.text !== "Guía de teclas de Omarchy"
-            || saveButton.text !== "Guardar") {
+            || saveButton.text !== "Guardar"
+            || testRoot.settingsOverlay.registeredSearchQuery !== ""
+            || testRoot.settingsOverlay.registeredFilterGroup !== ""
+            || testRoot.settingsOverlay.registeredBindings.length !== 0) {
           testRoot.fail("reopening Settings restored a stale language")
           return
         }

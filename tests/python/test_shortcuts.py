@@ -702,6 +702,8 @@ class ShortcutManagerTests(unittest.TestCase):
         self.source_records = "SUPER + A → Alpha\texec\talpha-command\n"
         self.source_discovery_error: OSError | None = None
         self.config_errors = ""
+        self.default_browser = "chromium"
+        self.default_editor = "nvim"
         self.calls: list[tuple[str, ...]] = []
         self.base_menu: str | None = None
         self.base_hyprctl: str | None = None
@@ -808,6 +810,22 @@ bindd
             return "ok\n"
         if command == ("hyprctl", "configerrors"):
             return self.config_errors
+        if command == ("omarchy-default-browser",):
+            return self.default_browser + "\n"
+        if command == (
+            "env", "-u", "BROWSER", "xdg-settings", "get", "default-web-browser"
+        ):
+            return {
+                "chromium": "chromium.desktop",
+                "chrome": "google-chrome.desktop",
+                "brave": "brave-browser.desktop",
+                "brave-origin": "brave-origin.desktop",
+                "edge": "microsoft-edge.desktop",
+                "firefox": "firefox.desktop",
+                "zen": "zen.desktop",
+            }.get(self.default_browser, self.default_browser) + "\n"
+        if command == ("omarchy-default-editor",):
+            return self.default_editor + "\n"
         raise AssertionError(f"unexpected command: {command}")
 
     def emulate_reload(self) -> None:
@@ -1406,6 +1424,11 @@ bindd
                     "titleOverride": "",
                     "actionKind": "exec",
                     "launchKind": "",
+                    "displayKind": "action",
+                    "roleKind": "",
+                    "targetName": "",
+                    "targetId": "action:action-cf579ebb6e3be320d2a9969ee8fdbe5d9077306ac8d2f6258399303540be610b",
+                    "presentationId": "binding-49755b0eb486b1e679b1872b4eafdc851a351a3a97fa3791724066a8555dc997",
                     "modifiers": ["SUPER"],
                     "key": "A",
                 },
@@ -1418,6 +1441,11 @@ bindd
                     "titleOverride": "",
                     "actionKind": "exec",
                     "launchKind": "",
+                    "displayKind": "action",
+                    "roleKind": "",
+                    "targetName": "",
+                    "targetId": "action:action-98c7c2a21ee1931ec0ffb39b40c818ec6ff5501c466679ec3ec1a8be2142562c",
+                    "presentationId": "binding-66dc4c8a2a18d650d369a7fdb4b7de738e6bd741507b5c584daed143e003e592",
                     "modifiers": ["SUPER"],
                     "key": "B",
                 },
@@ -1456,6 +1484,407 @@ bindd
 
         self.assertEqual(1, len(actions))
         self.assertEqual("webapp", actions[0]["launchKind"])
+        self.assertEqual("webapp:https://chatgpt.com/", actions[0]["targetId"])
+
+    def test_status_marks_focus_wrapped_webapp_actions_for_the_picker(self) -> None:
+        """Omarchy's named focus wrapper is still a webapp, not a general action."""
+        self.menu = "SUPER SHIFT + S → Google Maps\n"
+        command = (
+            "omarchy-launch-or-focus-webapp 'Google Maps' "
+            "'https://maps.google.com/'"
+        )
+        self.hyprctl = self.runtime_record(
+            "S", "Google Maps", "325", modmask=64 + 1,
+            dispatcher="__lua",
+        )
+        self.source_records = (
+            f"SUPER SHIFT + S → Google Maps\texec\t{command}\n"
+        )
+
+        action = self.manager().status()["actions"][0]
+
+        self.assertEqual("webapp", action["launchKind"])
+        self.assertEqual("webapp", action["displayKind"])
+        self.assertEqual("", action["roleKind"])
+        self.assertEqual("webapp:https://maps.google.com/", action["targetId"])
+
+    def test_status_names_the_agent_selected_by_omarchy(self) -> None:
+        """The Agent action must expose the active CLI instead of hiding Codex."""
+        self.menu = "SUPER SHIFT CTRL + A → Agent\n"
+        command = "omarchy-agent --pick"
+        self.hyprctl = self.runtime_record(
+            "A", "Agent", command, modmask=64 + 1 + 4
+        )
+        self.source_records = f"SUPER SHIFT CTRL + A → Agent\texec\t{command}\n"
+        agent_file = self.home / ".config" / "omarchy" / "defaults" / "agent"
+        agent_file.parent.mkdir(parents=True)
+        agent_file.write_text("codex\n", encoding="utf-8")
+
+        actions = self.manager().status()["actions"]
+
+        self.assertEqual(1, len(actions))
+        self.assertEqual("Codex", actions[0]["agentName"])
+        self.assertEqual("agent:codex", actions[0]["targetId"])
+
+    def test_default_agent_read_stays_bound_to_the_validated_inode(self) -> None:
+        """A concurrent pathname replacement must not change the checked value."""
+        self.menu = "SUPER SHIFT CTRL + A → Agent\n"
+        command = "omarchy-agent --pick"
+        self.hyprctl = self.runtime_record(
+            "A", "Agent", command, modmask=64 + 1 + 4
+        )
+        self.source_records = f"SUPER SHIFT CTRL + A → Agent\texec\t{command}\n"
+        agent_file = self.home / ".config" / "omarchy" / "defaults" / "agent"
+        agent_file.parent.mkdir(parents=True)
+        agent_file.write_text("codex\n", encoding="utf-8")
+        observed = threading.Event()
+        replaced = threading.Event()
+        original_stat = Path.stat
+
+        def racing_stat(path: Path, *args: object, **kwargs: object) -> os.stat_result:
+            info = original_stat(path, *args, **kwargs)
+            if path == agent_file and not observed.is_set():
+                observed.set()
+                self.assertTrue(replaced.wait(1), "replacement did not reach the race")
+            return info
+
+        def replace_agent() -> None:
+            if not observed.wait(0.25):
+                return
+            replacement = agent_file.with_name("agent.replacement")
+            replacement.write_text("claude\n", encoding="utf-8")
+            os.replace(replacement, agent_file)
+            replaced.set()
+
+        replacer = threading.Thread(target=replace_agent)
+        replacer.start()
+        try:
+            with patch.object(Path, "stat", new=racing_stat):
+                action = self.manager().status()["actions"][0]
+        finally:
+            replacer.join(timeout=2)
+
+        self.assertEqual("Codex", action["agentName"])
+
+    def test_status_names_the_application_registered_as_the_browser(self) -> None:
+        """The Browser role must identify its selected desktop application."""
+        self.menu = "SUPER + B → Browser\n"
+        command = "omarchy-launch-browser"
+        self.hyprctl = self.runtime_record("B", "Browser", command)
+        self.source_records = f"SUPER + B → Browser\texec\t{command}\n"
+        self.default_browser = "chromium"
+
+        actions = self.manager().status()["actions"]
+
+        self.assertEqual(1, len(actions))
+        self.assertEqual("Chromium", actions[0]["browserName"])
+        self.assertEqual("application:chromium.desktop", actions[0]["targetId"])
+        self.assertEqual("desktopApp", actions[0]["displayKind"])
+        self.assertEqual("browser", actions[0]["roleKind"])
+
+    def test_status_keeps_private_browser_action_distinct_from_plain_application(self) -> None:
+        """Arguments that change launch behavior must prevent target merging."""
+        self.menu = "SUPER SHIFT ALT + B → Browser (private)\n"
+        command = "omarchy-launch-browser --private"
+        self.hyprctl = self.runtime_record(
+            "B", "Browser (private)", command, modmask=64 + 1 + 8
+        )
+        self.source_records = (
+            f"SUPER SHIFT ALT + B → Browser (private)\texec\t{command}\n"
+        )
+
+        action = self.manager().status()["actions"][0]
+
+        self.assertEqual("desktopApp", action["displayKind"])
+        self.assertEqual("browser", action["roleKind"])
+        self.assertEqual("", action["targetName"])
+        self.assertTrue(action["targetId"].startswith("action:"))
+
+    def test_status_resolves_the_default_terminal_editor_by_installed_app(self) -> None:
+        """Editor must name and merge the selected TUI editor, not stay generic."""
+        (self.catalog_apps / "nvim.desktop").write_text(
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Neovim\n"
+            "TryExec=nvim\n"
+            "Exec=nvim %F\n"
+            "Terminal=true\n"
+            "Icon=nvim\n",
+            encoding="utf-8",
+        )
+        self.write_catalog_command("nvim")
+        self.menu = "SUPER SHIFT + N → Editor\n"
+        command = "omarchy-launch-editor"
+        self.hyprctl = self.runtime_record("N", "Editor", command, modmask=64 + 1)
+        self.source_records = f"SUPER SHIFT + N → Editor\texec\t{command}\n"
+
+        actions = self.manager(catalog_discovery=self.catalog_discovery()).status()["actions"]
+
+        self.assertEqual(1, len(actions))
+        self.assertEqual("Neovim", actions[0]["targetName"])
+        self.assertEqual("application:nvim.desktop", actions[0]["targetId"])
+        self.assertEqual("cmd", actions[0]["displayKind"])
+        self.assertEqual("editor", actions[0]["roleKind"])
+
+    def test_unmatched_punctuation_editor_keeps_action_identity(self) -> None:
+        """An empty normalized editor slug must not become a shared target."""
+        self.default_editor = "++"
+        self.menu = "SUPER SHIFT + N → Editor\n"
+        command = "omarchy-launch-editor"
+        self.hyprctl = self.runtime_record("N", "Editor", command, modmask=64 + 1)
+        self.source_records = f"SUPER SHIFT + N → Editor\texec\t{command}\n"
+
+        action = self.manager(
+            catalog_discovery=self.catalog_discovery()
+        ).status()["actions"][0]
+
+        self.assertEqual("editor", action["roleKind"])
+        self.assertTrue(action["targetId"].startswith("action:"))
+
+    def test_status_builds_one_application_index_per_request(self) -> None:
+        """Presentation enrichment must not rediscover apps for every action."""
+        application = catalog.CatalogItem(
+            kind="application",
+            id="application:demo.desktop",
+            title="Demo",
+            english_title="Demo",
+            summary="",
+            icon="demo-icon",
+            path="",
+            keywords=("Demo",),
+            target_id="application:demo.desktop",
+            launch_kind="desktopApp",
+        )
+
+        class CountingDiscovery:
+            def __init__(self) -> None:
+                self.index_calls = 0
+                self.single_lookup_calls = 0
+
+            def application_index(
+                self, language: str = "en"
+            ) -> tuple[dict[str, catalog.CatalogItem], dict[str, catalog.CatalogItem]]:
+                self.index_calls += 1
+                return ({application.id: application}, {"demo": application})
+
+            def application_for_executable(
+                self, executable: str, language: str = "en"
+            ) -> catalog.CatalogItem | None:
+                self.single_lookup_calls += 1
+                return application if executable == "demo" else None
+
+        discovery = CountingDiscovery()
+        self.menu = "SUPER + D → Demo one\nSUPER SHIFT + D → Demo two\n"
+        self.hyprctl = (
+            self.runtime_record("D", "Demo one", "uwsm-app -- demo")
+            + self.runtime_record(
+                "D", "Demo two", "omarchy-launch-demo-cwd", modmask=64 + 1
+            )
+        )
+        self.source_records = (
+            "SUPER + D → Demo one\texec\tuwsm-app -- demo\n"
+            "SUPER SHIFT + D → Demo two\texec\tomarchy-launch-demo-cwd\n"
+        )
+
+        actions = self.manager(catalog_discovery=discovery).status()["actions"]
+
+        self.assertEqual(2, len(actions))
+        self.assertTrue(all(
+            action["targetId"] == "application:demo.desktop" for action in actions
+        ))
+        self.assertEqual(1, discovery.index_calls)
+        self.assertEqual(0, discovery.single_lookup_calls)
+
+    def test_status_classifies_exec_window_operation_as_an_action(self) -> None:
+        """An exec implementation is not a CMD unless it opens a terminal UI."""
+        self.menu = "SUPER + G → Toggle window gaps\n"
+        command = "omarchy-toggle-window-gaps"
+        self.hyprctl = self.runtime_record("G", "Toggle window gaps", command)
+        self.source_records = f"SUPER + G → Toggle window gaps\texec\t{command}\n"
+
+        action = self.manager().status()["actions"][0]
+
+        self.assertEqual("action", action["displayKind"])
+        self.assertEqual("", action["roleKind"])
+
+    def test_status_classifies_terminal_launcher_as_cmd(self) -> None:
+        """CMD is reserved for actions that present a terminal window."""
+        self.menu = "SUPER + RETURN → Terminal\n"
+        command = "omarchy-launch-terminal"
+        self.hyprctl = self.runtime_record("RETURN", "Terminal", command)
+        self.source_records = f"SUPER + RETURN → Terminal\texec\t{command}\n"
+
+        action = self.manager().status()["actions"][0]
+
+        self.assertEqual("cmd", action["displayKind"])
+        self.assertEqual("", action["roleKind"])
+
+    def test_status_resolves_supported_native_launch_shapes_from_catalog(self) -> None:
+        """Native wrappers become desktop apps only through an installed app match."""
+        self.write_catalog_application("Demo")
+        commands = (
+            "demo",
+            "uwsm-app -- demo",
+            "omarchy-launch-or-focus '^demo$' 'uwsm-app -- demo'",
+            "omarchy-launch-demo-cwd",
+        )
+
+        for command in commands:
+            with self.subTest(command=command):
+                self.menu = "SUPER + D → Demo\n"
+                self.hyprctl = self.runtime_record("D", "Demo", command)
+                self.source_records = f"SUPER + D → Demo\texec\t{command}\n"
+
+                action = self.manager(
+                    catalog_discovery=self.catalog_discovery()
+                ).status()["actions"][0]
+
+                self.assertEqual("desktopApp", action["launchKind"])
+                self.assertEqual("desktopApp", action["displayKind"])
+                self.assertEqual("", action["roleKind"])
+                self.assertEqual("Demo", action["targetName"])
+                self.assertEqual("application:demo.desktop", action["targetId"])
+
+    def test_status_keeps_unmatched_native_style_launcher_as_action(self) -> None:
+        """A launcher-shaped command must not impersonate an uninstalled app."""
+        command = "omarchy-launch-vendor"
+        self.menu = "SUPER + V → Vendor\n"
+        self.hyprctl = self.runtime_record("V", "Vendor", command)
+        self.source_records = f"SUPER + V → Vendor\texec\t{command}\n"
+
+        action = self.manager(
+            catalog_discovery=self.catalog_discovery()
+        ).status()["actions"][0]
+
+        self.assertEqual("", action["launchKind"])
+        self.assertEqual("action", action["displayKind"])
+        self.assertEqual("", action["targetName"])
+        self.assertTrue(action["targetId"].startswith("action:"))
+
+    def test_status_classifies_focus_wrapped_tui_as_cmd(self) -> None:
+        """A focus wrapper around a TUI still opens a command window."""
+        command = "omarchy-launch-or-focus-tui 'cliamp'"
+        self.menu = "SUPER + M → Music TUI\n"
+        self.hyprctl = self.runtime_record("M", "Music TUI", command)
+        self.source_records = f"SUPER + M → Music TUI\texec\t{command}\n"
+
+        action = self.manager().status()["actions"][0]
+
+        self.assertEqual("cmd", action["displayKind"])
+        self.assertEqual("", action["roleKind"])
+
+    def test_status_classifies_interactive_desktop_surfaces_as_system_ui(self) -> None:
+        """Menus, panels, pickers, and overlays share one durable UI type."""
+        commands = (
+            "omarchy-menu toggle apps",
+            "omarchy-menu summon system",
+            "omarchy-shell shell toggle omarchy.bluetooth",
+            "omarchy-shell shell summon omarchy.reminders '{}'",
+            "omarchy-shell notifications showHistory",
+            "omarchy-menu-keybindings",
+            "omarchy-menu-file 'Choose a file' /tmp",
+            "omarchy-menu-select 'Choose one' one two",
+            "omarchy-toggle-bar",
+            "omarchy-capture-text",
+            "omarchy-transcode",
+            "omarchy-transcode --path /tmp",
+            "omarchy-reminder --interactive",
+            "hyprpicker -a",
+            "slurp",
+            "pkill hyprpicker || hyprpicker -a",
+        )
+
+        for command in commands:
+            with self.subTest(command=command):
+                self.menu = "SUPER + U → Interactive surface\n"
+                self.hyprctl = self.runtime_record(
+                    "U", "Interactive surface", command
+                )
+                self.source_records = (
+                    f"SUPER + U → Interactive surface\texec\t{command}\n"
+                )
+
+                action = self.manager().status()["actions"][0]
+
+                self.assertEqual("systemUi", action["displayKind"])
+                self.assertEqual("", action["roleKind"])
+                self.assertTrue(action["targetId"].startswith("action:"))
+
+    def test_status_keeps_immediate_actions_and_command_lookalikes_as_actions(self) -> None:
+        """Names alone must not turn direct state changes into system UI."""
+        commands = (
+            "omarchy-shell shell refresh omarchy.bluetooth",
+            "omarchy-shell shell toggle",
+            "omarchy-shell notifications dismissOne",
+            "omarchy-menu close",
+            "omarchy-menu refresh",
+            "omarchy-menu ping",
+            "omarchy-menu unknown",
+            "echo omarchy-menu",
+            "vendor-omarchy-menu",
+            "omarchy-menu-keybindings --print",
+            "omarchy-menu-keybindings -p",
+            "omarchy-reminder show",
+            "omarchy-reminder clear",
+            "omarchy-transcode input.mp4 mp4 1080p",
+            "pkill hyprpicker",
+            "omarchy-toggle-window-gaps",
+            "omarchy-toggle-bar sideways",
+            "omarchy-capture-text extra",
+            "omarchy-menu-keybindings 'unterminated",
+        )
+
+        for command in commands:
+            with self.subTest(command=command):
+                self.menu = "SUPER + U → Immediate action\n"
+                self.hyprctl = self.runtime_record(
+                    "U", "Immediate action", command
+                )
+                self.source_records = f"SUPER + U → Immediate action\texec\t{command}\n"
+
+                action = self.manager().status()["actions"][0]
+
+                self.assertEqual("action", action["displayKind"])
+                self.assertEqual("", action["roleKind"])
+
+    def test_status_keeps_catalog_application_priority_over_shell_surface_shape(self) -> None:
+        """A catalog-resolved app remains an app even when its command summons a surface."""
+        desktop_id = "omarchy-keyguide-settings.desktop"
+        (self.catalog_apps / desktop_id).write_text(
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Omarchy Keyguide\n"
+            "Exec=omarchy-shell shell summon mrai.keyguide\n"
+            "Icon=preferences-desktop-keyboard-shortcuts\n",
+            encoding="utf-8",
+        )
+        command = "omarchy-shell shell summon mrai.keyguide"
+        self.menu = "SUPER + K → Omarchy Keyguide\n"
+        self.hyprctl = self.runtime_record("K", "Omarchy Keyguide", command)
+        self.source_records = f"SUPER + K → Omarchy Keyguide\texec\t{command}\n"
+        manager = self.manager(catalog_discovery=self.catalog_discovery())
+        manager.path.parent.mkdir(parents=True, exist_ok=True)
+        manager.path.write_bytes(ManagedShortcutState(entries=(
+            ManagedShortcutEntry(
+                id="action-keyguide",
+                kind="new",
+                source_binding_id=None,
+                original=None,
+                current=ShortcutAction(
+                    modifiers=("SUPER",), key="K",
+                    description="Omarchy Keyguide", action_kind="exec",
+                    action_argument=command,
+                ),
+                selection_kind="application",
+                selection_id=f"application:{desktop_id}",
+            ),
+        )).to_bytes())
+        manager.path.chmod(0o600)
+
+        action = manager.status()["actions"][0]
+
+        self.assertEqual("desktopApp", action["displayKind"])
+        self.assertEqual("application:omarchy-keyguide-settings.desktop", action["targetId"])
 
     def test_reconcile_repairs_a_managed_omarchy_application_focus_pattern(self) -> None:
         """A selected app using the shared router is repaired transactionally."""
@@ -1971,6 +2400,11 @@ bindd
         self.assertEqual("command", entry.selection_kind)
         self.assertEqual(selected.id, entry.selection_id)
         self.assertEqual("My command", entry.title_override)
+        registered = next(
+            action for action in manager.status()["actions"]
+            if action["selectionId"] == selected.id
+        )
+        self.assertEqual("action", registered["displayKind"])
 
     def test_application_arguments_and_invalid_selection_id_are_rejected(self) -> None:
         self.write_catalog_application()

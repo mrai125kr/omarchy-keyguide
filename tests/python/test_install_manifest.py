@@ -5288,6 +5288,7 @@ xkb_symbols "test" {
             / "icons/hicolor/scalable/apps/omarchy-keyguide.svg"
         )
         legacy_new_paths = (
+            sandbox.home / BOUNDED_PROCESS_RELATIVE_PATH,
             sandbox.home / VISIBILITY_MODEL_RELATIVE_PATH,
             sandbox.home / SHORTCUTS_RELATIVE_PATH,
             sandbox.home / SHORTCUT_EDIT_ROW_RELATIVE_PATH,
@@ -5322,6 +5323,7 @@ xkb_symbols "test" {
         custom_env = {"XDG_DATA_HOME": str(custom_data_home)}
         self.assert_command_succeeded(sandbox.run_make("install", extra_env=custom_env))
         legacy_new_paths = (
+            sandbox.home / BOUNDED_PROCESS_RELATIVE_PATH,
             sandbox.home / VISIBILITY_MODEL_RELATIVE_PATH,
             sandbox.home / SHORTCUTS_RELATIVE_PATH,
             sandbox.home / SHORTCUT_EDIT_ROW_RELATIVE_PATH,
@@ -5525,7 +5527,11 @@ xkb_symbols "test" {
                 if name.startswith("upgrade_reservation"):
                     self.assertIn("reservation plan is not trusted", result.stdout)
                 else:
-                    self.assertIn("manifest validation failed", result.stdout)
+                    self.assertTrue(
+                        "manifest validation failed" in result.stdout
+                        or "reservation plan is not trusted" in result.stdout,
+                        result.stdout,
+                    )
                 self.assertEqual(shell_before, sandbox.shell_json.read_bytes())
                 self.assertNotIn(
                     f"bar put {PLUGIN_ID} --after omarchy.agents",

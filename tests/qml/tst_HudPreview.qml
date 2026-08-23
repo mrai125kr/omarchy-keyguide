@@ -193,6 +193,40 @@ TestCase {
     }
   }
 
+  function test_compact_preview_shows_icon_exact_title_and_one_type_badge() {
+    const preview = createTemporaryObject(previewComponent, this, {
+      language: "ko",
+      previewModifiers: ["SUPER", "SHIFT"],
+      iconResolver: function(iconName) {
+        return "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2' height='2'/%3E"
+      },
+      bindings: [{
+        id: "youtube", modifiers: ["SUPER", "SHIFT"], key: "Y",
+        description: "YouTube", displayKind: "webapp", roleKind: "",
+        icon: "youtube"
+      }],
+      settings: {
+        enabled: true, position: "center", opacity: 0.9, scale: 1.0,
+        followTheme: true, groups: ["SUPER+SHIFT"], hiddenBindingIds: []
+      }
+    })
+
+    verify(preview !== null)
+    wait(0)
+    const icon = findNamed(preview, "hudPreviewPresentationIcon-youtube", 0)
+    const title = findNamed(preview, "hudPreviewDescription-youtube", 0)
+    const badge = findNamed(preview, "hudPreviewTypeBadge-youtube", 0)
+    const badgeLabel = findNamed(preview, "hudPreviewTypeBadgeLabel-youtube", 0)
+    verify(icon !== null, "HUD preview app icon is missing")
+    verify(title !== null, "HUD preview title is missing")
+    verify(badge !== null, "HUD preview type badge is missing")
+    verify(String(icon.source || "") !== "")
+    compare(title.text, "YouTube")
+    compare(badgeLabel.text, "웹앱")
+    verify(badge.x > title.x,
+           "compact HUD type badge was not placed after the action title")
+  }
+
   function test_every_locale_extreme_scale_position_and_group_stays_bounded() {
     const locales = ["en", "ko", "ja", "zh_CN", "es"]
     const scales = [0.75, 1.5]

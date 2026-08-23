@@ -2,8 +2,10 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls as QQC
+import QtQml.Models
 import "../ActionSearchModel.js" as ActionSearchModel
 import "../I18n.js" as I18n
+import "../VisibilityModel.js" as VisibilityModel
 
 Item {
   id: root
@@ -30,12 +32,46 @@ Item {
   property string fontFamily: "sans-serif"
   property var iconResolver: null
 
-  readonly property var results: ActionSearchModel.results(
+  readonly property var rawResults: ActionSearchModel.results(
     query, language, actions, catalogItems, 0)
+  property var results: []
   readonly property int resultCount: results.length
 
   signal selected(var result)
   signal watchingChanged(bool watching)
+
+  function localeName(value) {
+    const locales = {
+      en: "en_US", ko: "ko_KR", ja: "ja_JP",
+      zh_CN: "zh_CN", es: "es_ES"
+    }
+    return locales[String(value || "")] || "en_US"
+  }
+
+  function refreshResultOrder() {
+    const source = rawResults || []
+    localeSortSource.clear()
+    for (let index = 0; index < source.length; index += 1) {
+      const item = source[index]
+      localeSortSource.append({
+        sourceIndex: index,
+        score: Number(item && item.score || 0),
+        registered: Boolean(item && item.registered),
+        title: String(item && item.title || ""),
+        targetId: String(item && item.targetId || ""),
+        resultId: String(item && item.id || "")
+      })
+    }
+    localeSortProxy.invalidateSorter()
+    const ordered = []
+    for (let row = 0; row < localeSortProxy.rowCount(); row += 1) {
+      const proxyIndex = localeSortProxy.index(row, 0)
+      const sourceIndex = localeSortProxy.mapToSource(proxyIndex).row
+      if (sourceIndex >= 0 && sourceIndex < source.length)
+        ordered.push(source[sourceIndex])
+    }
+    results = ordered
+  }
 
   function sourceContains(id) {
     const target = String(id || "")
@@ -128,8 +164,54 @@ Item {
     return "image://icon/" + iconName
   }
 
+  function surfaceIsLight() {
+    return surface.r * 0.2126 + surface.g * 0.7152 + surface.b * 0.0722 > 0.55
+  }
+
+  function typeAccent(kind) {
+    return VisibilityModel.typeAccent(kind, surfaceIsLight(), accent)
+  }
+
+  function shortcutList(item) {
+    const declared = item && item.currentShortcuts
+    const result = []
+    if (declared && typeof declared.length === "number") {
+      for (let index = 0; index < declared.length; index += 1) {
+        const shortcut = declared[index]
+        const chord = String(shortcut && shortcut.chord || "").trim()
+        if (chord && !result.some(function(candidate) {
+          return candidate.chord === chord
+        })) result.push({
+          chord: chord,
+          badgeKind: String(shortcut && shortcut.badgeKind
+            || item && item.badgeKind || "action"),
+          roleBadgeKind: String(shortcut && shortcut.roleBadgeKind || "")
+        })
+      }
+    }
+    if (result.length > 0)
+      return result
+    const chords = item && item.currentChords
+      && typeof item.currentChords.length === "number"
+      ? item.currentChords : String(item && item.currentChord || "").split(" · ")
+    for (let index = 0; index < chords.length; index += 1) {
+      const chord = chords[index]
+      const value = String(chord || "").trim()
+      if (value && !result.some(function(candidate) {
+        return candidate.chord === value
+      })) result.push({
+        chord: value,
+        badgeKind: String(item && item.badgeKind || "action"),
+        roleBadgeKind: String(item && item.roleBadgeKind || "")
+      })
+    }
+    return result
+  }
+
   onActionsChanged: Qt.callLater(function() { root.reconcileSelection() })
   onCatalogItemsChanged: Qt.callLater(function() { root.reconcileSelection() })
+  onRawResultsChanged: refreshResultOrder()
+  onLanguageChanged: Qt.callLater(refreshResultOrder)
   onResultsChanged: updateCurrentIndex()
   onQueryChanged: updateCurrentIndex()
   onEnabledChanged: if (!enabled) closeSearch()
@@ -142,7 +224,51 @@ Item {
 
   Component.onCompleted: {
     reconcileSelection()
+    refreshResultOrder()
     updateCurrentIndex()
+  }
+
+  ListModel {
+    id: localeSortSource
+  }
+
+  SortFilterProxyModel {
+    id: localeSortProxy
+
+    model: localeSortSource
+    sorters: [
+      RoleSorter {
+        roleName: "score"
+        sortOrder: Qt.DescendingOrder
+        priority: 0
+      },
+      RoleSorter {
+        roleName: "registered"
+        sortOrder: Qt.DescendingOrder
+        priority: 1
+      },
+      StringSorter {
+        roleName: "title"
+        locale: Qt.locale(root.localeName(root.language))
+        caseSensitivity: Qt.CaseInsensitive
+        numericMode: true
+        priority: 2
+      },
+      StringSorter {
+        roleName: "targetId"
+        locale: Qt.locale("en_US")
+        caseSensitivity: Qt.CaseInsensitive
+        numericMode: true
+        priority: 3
+      },
+      StringSorter {
+        roleName: "resultId"
+        locale: Qt.locale("en_US")
+        caseSensitivity: Qt.CaseInsensitive
+        numericMode: true
+        priority: 4
+      }
+    ]
   }
 
   Rectangle {
@@ -272,29 +398,6 @@ Item {
       boundsBehavior: Flickable.StopAtBounds
       currentIndex: root.currentIndex
       model: root.results
-      section.property: "kind"
-      section.criteria: ViewSection.FullString
-
-      section.delegate: Item {
-        required property string section
-
-        width: resultList.width
-        height: 34
-
-        Text {
-          objectName: "shortcutActionSearchCategory-" + parent.section
-          anchors.left: parent.left
-          anchors.leftMargin: 8
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: 7
-          text: I18n.text(
-            root.language, "search.category." + parent.section, {})
-          color: root.mutedForeground
-          font.family: root.fontFamily
-          font.pixelSize: 12
-          font.bold: true
-        }
-      }
 
       delegate: Rectangle {
         id: resultRow
@@ -302,6 +405,10 @@ Item {
         required property int index
         required property var modelData
         property var resultData: modelData
+        readonly property color typeAccentColor: root.typeAccent(
+          resultData.badgeKind)
+        readonly property var shortcutEntries: root.shortcutList(resultData)
+        readonly property int shortcutChipCount: shortcutRepeater.count
 
         objectName: "shortcutActionSearchResult"
         width: resultList.width
@@ -317,16 +424,30 @@ Item {
         Image {
           id: applicationIcon
 
-          objectName: "shortcutActionSearchApplicationIcon"
-          visible: resultRow.resultData.kind === "application"
+          objectName: resultRow.resultData.kind === "application"
+            ? "shortcutActionSearchApplicationIcon"
+            : "shortcutActionSearchResultIcon"
+          visible: true
           anchors.left: parent.left
           anchors.leftMargin: 10
           anchors.verticalCenter: parent.verticalCenter
-          width: visible ? 32 : 0
+          width: 32
           height: 32
           fillMode: Image.PreserveAspectFit
-          source: visible ? root.applicationIconSource(resultRow.resultData) : ""
+          source: root.applicationIconSource(resultRow.resultData)
           asynchronous: true
+
+          Text {
+            objectName: "shortcutActionSearchIconFallback"
+            anchors.centerIn: parent
+            visible: applicationIcon.status === Image.Error
+            text: VisibilityModel.fallbackIconGlyph(
+              resultRow.resultData.badgeKind)
+            color: resultRow.typeAccentColor
+            font.family: root.fontFamily
+            font.pixelSize: 13
+            font.bold: true
+          }
         }
 
         Row {
@@ -334,8 +455,8 @@ Item {
 
           anchors.left: applicationIcon.right
           anchors.leftMargin: applicationIcon.visible ? 11 : 10
-          anchors.right: shortcutChip.left
-          anchors.rightMargin: shortcutChip.visible ? 12 : 10
+          anchors.right: shortcutChips.left
+          anchors.rightMargin: shortcutChips.visible ? 12 : 10
           anchors.verticalCenter: parent.verticalCenter
           height: 26
           spacing: 7
@@ -346,7 +467,9 @@ Item {
             objectName: "shortcutActionSearchTitle"
             width: Math.max(0, Math.min(implicitWidth,
               leadingContent.width - (commandBadge.visible
-                ? commandBadge.width + leadingContent.spacing : 0)))
+                ? commandBadge.width + leadingContent.spacing : 0)
+              - (roleBadge.visible
+                ? roleBadge.width + leadingContent.spacing : 0)))
             height: leadingContent.height
             verticalAlignment: Text.AlignVCenter
             text: String(resultRow.resultData.title || "")
@@ -360,28 +483,77 @@ Item {
           Rectangle {
             id: commandBadge
 
-            visible: resultRow.resultData.kind === "command"
+            visible: resultRow.resultData.badgeKind === "cmd"
               || resultRow.resultData.badgeKind === "webapp"
+              || resultRow.resultData.badgeKind === "desktopApp"
+              || resultRow.resultData.badgeKind === "action"
+              || resultRow.resultData.badgeKind === "systemUi"
             width: visible ? commandBadgeLabel.implicitWidth + 18 : 0
             height: 26
             radius: height / 2
-            color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.15)
+            color: Qt.rgba(resultRow.typeAccentColor.r,
+                           resultRow.typeAccentColor.g,
+                           resultRow.typeAccentColor.b, 0.16)
             border.width: 1
             border.color: Qt.rgba(
-              root.accent.r, root.accent.g, root.accent.b, 0.30)
+              resultRow.typeAccentColor.r, resultRow.typeAccentColor.g,
+              resultRow.typeAccentColor.b, 0.42)
 
             Text {
               id: commandBadgeLabel
 
-              objectName: resultRow.resultData.kind === "command"
+              objectName: resultRow.resultData.badgeKind === "cmd"
                 ? "shortcutActionSearchCommandBadge"
                 : (resultRow.resultData.badgeKind === "webapp"
-                    ? "shortcutActionSearchWebAppBadge" : "")
+                    ? "shortcutActionSearchWebAppBadge"
+                    : (resultRow.resultData.badgeKind === "desktopApp"
+                        ? "shortcutActionSearchDesktopAppBadge"
+                        : (resultRow.resultData.badgeKind === "action"
+                            ? "shortcutActionSearchActionBadge"
+                            : (resultRow.resultData.badgeKind === "systemUi"
+                                ? "shortcutActionSearchSystemUiBadge" : ""))))
               anchors.centerIn: parent
               text: I18n.text(root.language,
-                resultRow.resultData.kind === "command"
-                  ? "search.commandBadge" : "search.webAppBadge", {})
-              color: root.accent
+                VisibilityModel.typeBadgeKey(
+                  resultRow.resultData.badgeKind), {})
+              color: resultRow.typeAccentColor
+              font.family: root.fontFamily
+              font.pixelSize: 11
+              font.bold: true
+            }
+          }
+
+          Rectangle {
+            id: roleBadge
+
+            visible: resultRow.resultData.roleBadgeKind === "agent"
+              || resultRow.resultData.roleBadgeKind === "browser"
+              || resultRow.resultData.roleBadgeKind === "editor"
+            width: visible ? roleBadgeLabel.implicitWidth + 18 : 0
+            height: 26
+            radius: height / 2
+            color: Qt.rgba(root.foreground.r, root.foreground.g,
+                           root.foreground.b, 0.09)
+            border.width: 1
+            border.color: Qt.rgba(root.foreground.r, root.foreground.g,
+                                  root.foreground.b, 0.14)
+
+            Text {
+              id: roleBadgeLabel
+
+              objectName: resultRow.resultData.roleBadgeKind === "agent"
+                ? "shortcutActionSearchAgentBadge"
+                : (resultRow.resultData.roleBadgeKind === "browser"
+                    ? "shortcutActionSearchBrowserBadge"
+                    : (resultRow.resultData.roleBadgeKind === "editor"
+                        ? "shortcutActionSearchEditorBadge" : ""))
+              anchors.centerIn: parent
+              text: I18n.text(root.language,
+                resultRow.resultData.roleBadgeKind === "agent"
+                  ? "search.agentBadge"
+                  : (resultRow.resultData.roleBadgeKind === "browser"
+                      ? "search.browserBadge" : "search.editorBadge"), {})
+              color: root.mutedForeground
               font.family: root.fontFamily
               font.pixelSize: 11
               font.bold: true
@@ -389,32 +561,53 @@ Item {
           }
         }
 
-        Rectangle {
-          id: shortcutChip
+        Row {
+          id: shortcutChips
 
-          visible: String(resultRow.resultData.currentChord || "") !== ""
-          width: visible ? shortcutChipLabel.implicitWidth + 18 : 0
+          objectName: "shortcutActionSearchShortcutChips"
+          visible: resultRow.shortcutEntries.length > 0
           height: 26
           anchors.right: parent.right
           anchors.rightMargin: 10
           anchors.verticalCenter: parent.verticalCenter
-          radius: height / 2
-          color: Qt.rgba(root.foreground.r, root.foreground.g,
-                         root.foreground.b, 0.09)
-          border.width: 1
-          border.color: Qt.rgba(root.foreground.r, root.foreground.g,
-                                root.foreground.b, 0.10)
+          spacing: 6
 
-          Text {
-            id: shortcutChipLabel
+          Repeater {
+            id: shortcutRepeater
 
-            objectName: shortcutChip.visible
-              ? "shortcutActionSearchShortcutChip" : ""
-            anchors.centerIn: parent
-            text: String(resultRow.resultData.currentChord || "")
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: 11
+            model: resultRow.shortcutEntries
+
+            delegate: Rectangle {
+              id: shortcutChip
+
+              required property int index
+              required property var modelData
+              readonly property color accentColor: root.typeAccent(
+                String(modelData.badgeKind || resultRow.resultData.badgeKind))
+
+              objectName: "shortcutActionSearchShortcutChipSurface-" + index
+              width: shortcutChipLabel.implicitWidth + 18
+              height: 26
+              radius: height / 2
+              color: Qt.rgba(shortcutChip.accentColor.r,
+                             shortcutChip.accentColor.g,
+                             shortcutChip.accentColor.b, 0.16)
+              border.width: 1
+              border.color: Qt.rgba(shortcutChip.accentColor.r,
+                                    shortcutChip.accentColor.g,
+                                    shortcutChip.accentColor.b, 0.42)
+
+              Text {
+                id: shortcutChipLabel
+
+                objectName: "shortcutActionSearchShortcutChip"
+                anchors.centerIn: parent
+                text: String(shortcutChip.modelData.chord || "")
+                color: shortcutChip.accentColor
+                font.family: root.fontFamily
+                font.pixelSize: 11
+              }
+            }
           }
         }
 

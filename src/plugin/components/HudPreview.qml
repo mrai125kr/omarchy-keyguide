@@ -1,6 +1,7 @@
 import QtQuick
 import "../HudModel.js" as HudModel
 import "../I18n.js" as I18n
+import "../VisibilityModel.js" as VisibilityModel
 
 Item {
   id: root
@@ -14,6 +15,7 @@ Item {
   property color themeAccent: "#8fbfff"
   property color themeBorder: Qt.alpha(themeForeground, 0.22)
   property string fontFamily: "sans-serif"
+  property var iconResolver: null
 
   function arrayFrom(value) {
     if (!value || typeof value.length !== "number" || typeof value === "string")
@@ -91,6 +93,24 @@ Item {
     if (root.previewPosition === "bottom")
       return previewViewport.height - root.previewMargin - paintedHeight + transformInset
     return (previewViewport.height - cardHeight) / 2
+  }
+
+  function presentationIconSource(binding) {
+    const iconName = String(binding && binding.icon || "")
+    if (!iconName)
+      return ""
+    if (typeof root.iconResolver === "function") {
+      const resolved = String(root.iconResolver(iconName) || "")
+      if (resolved)
+        return resolved
+    }
+    return "image://icon/" + iconName
+  }
+
+  function surfaceIsLight() {
+    return root.previewBackground.r * 0.2126
+      + root.previewBackground.g * 0.7152
+      + root.previewBackground.b * 0.0722 > 0.55
   }
 
   Rectangle {
@@ -206,14 +226,83 @@ Item {
             }
           }
 
+          Image {
+            id: presentationIcon
+
+            objectName: "hudPreviewPresentationIcon-"
+              + String(modelData.id || "")
+            anchors.left: parent.left
+            anchors.leftMargin: keyChip.width + 8
+            anchors.verticalCenter: parent.verticalCenter
+            width: 22
+            height: 22
+            sourceSize.width: 22
+            sourceSize.height: 22
+            source: root.presentationIconSource(modelData)
+            visible: String(source || "") !== ""
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+
+            Text {
+              objectName: "hudPreviewPresentationIconFallback-"
+                + String(modelData.id || "")
+              anchors.centerIn: parent
+              visible: presentationIcon.status === Image.Error
+              text: VisibilityModel.fallbackIconGlyph(
+                String(modelData.displayKind || "action"))
+              color: VisibilityModel.typeAccent(
+                String(modelData.displayKind || "action"),
+                root.surfaceIsLight(), root.previewAccent)
+              font.family: root.fontFamily
+              font.pixelSize: 11
+              font.bold: true
+            }
+          }
+
+          Rectangle {
+            id: typeBadge
+
+            readonly property string displayKind: String(
+              modelData && modelData.displayKind || "action")
+            readonly property color typeAccent: VisibilityModel.typeAccent(
+              displayKind, root.surfaceIsLight(), root.previewAccent)
+            objectName: "hudPreviewTypeBadge-" + String(modelData.id || "")
+            visible: parent.width >= 180
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: visible ? typeBadgeLabel.implicitWidth + 14 : 0
+            height: 22
+            radius: height / 2
+            color: Qt.rgba(typeAccent.r, typeAccent.g, typeAccent.b, 0.16)
+            border.width: 1
+            border.color: Qt.rgba(
+              typeAccent.r, typeAccent.g, typeAccent.b, 0.42)
+
+            Text {
+              id: typeBadgeLabel
+
+              objectName: "hudPreviewTypeBadgeLabel-"
+                + String(modelData.id || "")
+              anchors.centerIn: parent
+              text: I18n.text(root.language,
+                VisibilityModel.typeBadgeKey(typeBadge.displayKind), {})
+              color: typeBadge.typeAccent
+              font.family: root.fontFamily
+              font.pixelSize: 9
+              font.bold: true
+            }
+          }
+
           Text {
             id: descriptionText
 
             objectName: "hudPreviewDescription-" + String(modelData.id || "")
             anchors.left: parent.left
             anchors.leftMargin: keyChip.width + 8
+              + (presentationIcon.visible ? presentationIcon.width + 6 : 0)
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, parent.width - keyChip.width - 8)
+            width: Math.max(0, (typeBadge.visible ? typeBadge.x - 6
+              : parent.width) - x)
             height: root.previewTextHeight
             text: String(modelData.description || "")
             color: root.previewForeground

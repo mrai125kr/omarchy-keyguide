@@ -59,6 +59,44 @@ TestCase {
             "확인하려면 ‘제거’를 한 번 더 누르세요.")
   }
 
+  function test_search_badges_never_wrap_their_labels_in_parentheses() {
+    const keys = [
+      "search.cmdBadge", "search.desktopAppBadge", "search.webAppBadge",
+      "search.agentBadge", "search.browserBadge", "search.editorBadge",
+      "search.actionBadge", "search.systemUiBadge"
+    ]
+    for (const language of I18n.languages()) {
+      for (const key of keys) {
+        const label = I18n.text(language.id, key, {})
+        verify(!label.startsWith("("), language.id + ": " + key)
+        verify(!label.endsWith(")"), language.id + ": " + key)
+      }
+    }
+  }
+
+  function test_system_ui_badge_is_translated_in_every_supported_language() {
+    const expected = {
+      en: "SYSTEM UI", ko: "시스템 UI", ja: "システムUI",
+      zh_CN: "系统界面", es: "SISTEMA"
+    }
+    for (const language of I18n.languages())
+      compare(I18n.text(language.id, "search.systemUiBadge", {}),
+              expected[language.id])
+  }
+
+  function test_registered_shortcut_filter_copy_is_localized() {
+    compare(I18n.text("en", "shortcut.filterTitle", {}),
+            "Find registered shortcuts")
+    compare(I18n.text("ko", "shortcut.filterTitle", {}),
+            "등록된 단축키 찾기")
+    compare(I18n.text("ko", "shortcut.filterPlaceholder", {}),
+            "제목, 키 또는 유형 검색")
+    compare(I18n.text("ko", "shortcut.filterIdle", {}),
+            "검색어를 입력하거나 조합키를 선택하세요.")
+    compare(I18n.text("ko", "shortcut.filterNoResults", {}),
+            "조건에 맞는 등록 단축키가 없습니다.")
+  }
+
   function test_modifiers_keep_canonical_identity_but_use_display_labels() {
     compare(I18n.modifier("en", "SUPER"), "Super")
     compare(I18n.modifier("ko", "CTRL"), "Ctrl")

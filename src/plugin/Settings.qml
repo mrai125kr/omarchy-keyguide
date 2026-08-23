@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls as QQC
+import QtQml.Models
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
@@ -40,6 +41,8 @@ Item {
   property bool removeConfirmationArmed: false
   property string shortcutEditorError: ""
   property bool resetConfirmationArmed: false
+  property string registeredSearchQuery: ""
+  property string registeredFilterGroup: ""
 
   readonly property var presentationSettingKeys: [
     "enabled", "position", "scale", "opacity", "followTheme", "groups",
@@ -55,8 +58,23 @@ Item {
     root.pendingSettings && root.pendingSettings.language || "en")
   readonly property bool keyboardFocusExclusive: settingsWindow.exclusiveKeyboardFocus
   readonly property var shortcutStatus: root.service ? root.service.shortcutStatus : null
-  readonly property var selectedSection: VisibilityModel.sectionForGroup(
-    root.service ? root.service.allBindings : [], root.selectedGroup)
+  readonly property var registeredBindingCandidates: VisibilityModel.registeredBindings(
+    root.service ? root.service.allBindings : [],
+    root.shortcutStatus ? root.shortcutStatus.actions : [],
+    root.registeredSearchQuery, root.registeredFilterGroup, root.uiLanguage,
+    root.service && root.service.actionCatalog
+      ? root.service.actionCatalog.items : [])
+  property var registeredBindings: []
+  readonly property var previewBindings: VisibilityModel.presentedBindings(
+    root.service ? root.service.allBindings : [],
+    root.shortcutStatus ? root.shortcutStatus.actions : [],
+    root.service && root.service.actionCatalog
+      ? root.service.actionCatalog.items : [],
+    root.uiLanguage)
+  readonly property int registeredBindingTotal: root.service
+    ? root.arrayFrom(root.service.allBindings).length : 0
+  readonly property bool registeredFilterActive:
+    root.registeredSearchQuery.trim() !== "" || root.registeredFilterGroup !== ""
   readonly property var keyOptions: VisibilityModel.keyOptions(
     root.shortcutStatus, root.selectedGroup, root.uiLanguage)
   readonly property var selectedKeyOption: VisibilityModel.keyOption(
@@ -116,6 +134,38 @@ Item {
       followTheme: true,
       language: "en"
     }
+  }
+
+  function localeName(value) {
+    const locales = {
+      en: "en_US", ko: "ko_KR", ja: "ja_JP",
+      zh_CN: "zh_CN", es: "es_ES"
+    }
+    return locales[String(value || "")] || "en_US"
+  }
+
+  function refreshRegisteredBindingOrder() {
+    const source = root.registeredBindingCandidates || []
+    registeredSortSource.clear()
+    for (let index = 0; index < source.length; index += 1) {
+      const binding = source[index]
+      registeredSortSource.append({
+        sourceIndex: index,
+        title: String(binding && binding.description || ""),
+        group: VisibilityModel.bindingGroup(binding),
+        key: String(binding && binding.key || ""),
+        bindingId: String(binding && binding.id || "")
+      })
+    }
+    registeredSortProxy.invalidateSorter()
+    const ordered = []
+    for (let row = 0; row < registeredSortProxy.rowCount(); row += 1) {
+      const proxyIndex = registeredSortProxy.index(row, 0)
+      const sourceIndex = registeredSortProxy.mapToSource(proxyIndex).row
+      if (sourceIndex >= 0 && sourceIndex < source.length)
+        ordered.push(source[sourceIndex])
+    }
+    root.registeredBindings = ordered
   }
 
   function t(key, parameters) {
@@ -355,6 +405,20 @@ Item {
     root.previewGroup = nextGroup
     root.resetConfirmationArmed = false
     return true
+  }
+
+  function selectRegisteredGroup(group) {
+    const nextGroup = String(group || "")
+    if (root.groupOptions.indexOf(nextGroup) === -1)
+      return false
+    root.registeredFilterGroup = root.registeredFilterGroup === nextGroup
+      ? "" : nextGroup
+    return true
+  }
+
+  function resetRegisteredFilter() {
+    root.registeredSearchQuery = ""
+    root.registeredFilterGroup = ""
   }
 
   function catalogItemById(id) {
@@ -691,7 +755,9 @@ Item {
 
     root.beginPending()
     root.selectGroup("SUPER")
+    root.resetRegisteredFilter()
     root.opened = true
+    root.setCatalogWatching(true)
     Qt.callLater(function () {
       keyCatcher.forceActiveFocus()
     })
@@ -702,6 +768,7 @@ Item {
     root.setCatalogWatching(false)
     root.opened = false
     root.selectGroup("SUPER")
+    root.resetRegisteredFilter()
     root.beginPending()
   }
 
@@ -711,6 +778,7 @@ Item {
     root.setCatalogWatching(false)
     root.opened = false
     root.selectGroup("SUPER")
+    root.resetRegisteredFilter()
     root.beginPending()
     if (root.shell && typeof root.shell.hide === "function") {
       root.shell.hide((root.manifest && root.manifest.id) || "mrai.keyguide")
@@ -763,8 +831,55 @@ Item {
 
   onServiceChanged: if (!root.opened)
     root.beginPending()
-  onUiLanguageChanged: root.refreshAssignmentDefaultTitle()
-  Component.onCompleted: root.beginPending()
+  onRegisteredBindingCandidatesChanged: root.refreshRegisteredBindingOrder()
+  onUiLanguageChanged: {
+    root.refreshAssignmentDefaultTitle()
+    root.refreshRegisteredBindingOrder()
+  }
+  Component.onCompleted: {
+    root.beginPending()
+    root.refreshRegisteredBindingOrder()
+  }
+
+  ListModel {
+    id: registeredSortSource
+  }
+
+  SortFilterProxyModel {
+    id: registeredSortProxy
+
+    model: registeredSortSource
+    sorters: [
+      StringSorter {
+        roleName: "title"
+        locale: Qt.locale(root.localeName(root.uiLanguage))
+        caseSensitivity: Qt.CaseInsensitive
+        numericMode: true
+        priority: 0
+      },
+      StringSorter {
+        roleName: "group"
+        locale: Qt.locale("en_US")
+        caseSensitivity: Qt.CaseInsensitive
+        numericMode: true
+        priority: 1
+      },
+      StringSorter {
+        roleName: "key"
+        locale: Qt.locale("en_US")
+        caseSensitivity: Qt.CaseInsensitive
+        numericMode: true
+        priority: 2
+      },
+      StringSorter {
+        roleName: "bindingId"
+        locale: Qt.locale("en_US")
+        caseSensitivity: Qt.CaseInsensitive
+        numericMode: true
+        priority: 3
+      }
+    ]
+  }
 
   component ShortcutChord: Item {
     id: chordRoot
@@ -1295,13 +1410,16 @@ Item {
                         Math.min(Style.space(340), Math.round(width * 0.46)))
                       settings: root.pendingSettings
                       language: root.uiLanguage
-                      bindings: root.service ? root.service.allBindings : []
+                      bindings: root.previewBindings
                       previewModifiers: root.previewGroup.split("+")
                       themeBackground: Color.popups.background
                       themeForeground: Color.popups.text
                       themeAccent: root.accent
                       themeBorder: Color.popups.border
                       fontFamily: root.fontFamily
+                      iconResolver: function(iconName) {
+                        return Quickshell.iconPath(iconName, true)
+                      }
                     }
                   }
                 }
@@ -1786,7 +1904,8 @@ Item {
                         root.selectSearchResult(result)
                       }
                       onWatchingChanged: function(watching) {
-                        root.setCatalogWatching(watching)
+                        if (watching)
+                          root.setCatalogWatching(true)
                       }
                       onSelectionWasRemovedChanged: {
                         if (selectionWasRemoved && root.assignmentSelectionId) {
@@ -1920,6 +2039,125 @@ Item {
                 }
 
                 Rectangle {
+                  id: registeredFilterCard
+
+                  objectName: "shortcutRegisteredFilter"
+                  width: parent.width
+                  height: registeredFilterColumn.implicitHeight
+                    + Style.spacing.md * 2
+                  color: Qt.rgba(root.foreground.r, root.foreground.g,
+                    root.foreground.b, 0.025)
+                  border.color: Qt.rgba(root.foreground.r, root.foreground.g,
+                    root.foreground.b, 0.18)
+                  border.width: 1
+                  radius: Style.cornerRadius
+
+                  Column {
+                    id: registeredFilterColumn
+
+                    x: Style.spacing.md
+                    y: Style.spacing.md
+                    width: parent.width - Style.spacing.md * 2
+                    spacing: Style.spacing.sm
+
+                    Text {
+                      width: parent.width
+                      text: root.t("shortcut.filterTitle", {})
+                      color: root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.subtitle
+                      font.bold: true
+                    }
+
+                    Text {
+                      width: parent.width
+                      text: root.t("shortcut.filterHelp", {})
+                      color: Qt.darker(root.foreground, 1.45)
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      wrapMode: Text.WordWrap
+                    }
+
+                    QQC.TextField {
+                      id: registeredSearchInput
+
+                      objectName: "shortcutRegisteredSearchInput"
+                      width: parent.width
+                      height: Style.space(44)
+                      enabled: !root.shortcutBusy && !root.awaitingSave
+                      placeholderText: root.t("shortcut.filterPlaceholder", {})
+                      placeholderTextColor: Qt.darker(root.foreground, 1.55)
+                      text: root.registeredSearchQuery
+                      color: root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                      leftPadding: Style.spacing.controlPaddingX + Style.space(24)
+                      rightPadding: Style.spacing.controlPaddingX
+                      verticalAlignment: TextInput.AlignVCenter
+                      selectByMouse: true
+                      onTextEdited: root.registeredSearchQuery = text
+                      background: Rectangle {
+                        radius: height / 2
+                        color: Qt.rgba(root.foreground.r, root.foreground.g,
+                          root.foreground.b, 0.045)
+                        border.width: registeredSearchInput.activeFocus ? 1.5 : 1
+                        border.color: registeredSearchInput.activeFocus
+                          ? root.accent
+                          : Qt.rgba(root.foreground.r, root.foreground.g,
+                              root.foreground.b, 0.18)
+
+                        Text {
+                          anchors.left: parent.left
+                          anchors.leftMargin: Style.spacing.controlPaddingX
+                          anchors.verticalCenter: parent.verticalCenter
+                          text: "\u2315"
+                          color: registeredSearchInput.activeFocus
+                            ? root.accent : Qt.darker(root.foreground, 1.45)
+                          font.family: root.fontFamily
+                          font.pixelSize: 21
+                        }
+                      }
+                    }
+
+                    Flow {
+                      width: parent.width
+                      height: childrenRect.height
+                      spacing: Style.spacing.sm
+
+                      Repeater {
+                        model: root.groupOptions
+
+                        delegate: Button {
+                          required property var modelData
+
+                          objectName: "shortcutRegisteredGroup-"
+                            + String(modelData || "")
+                          text: root.groupLabel(String(modelData || ""))
+                          selected: root.registeredFilterGroup
+                            === String(modelData || "")
+                          focusable: true
+                          bordered: true
+                          enabled: !root.shortcutBusy && !root.awaitingSave
+                          foreground: root.foreground
+                          background: root.background
+                          accent: root.accent
+                          fontFamily: root.fontFamily
+                          fontSize: Style.font.caption
+                          verticalPadding: Style.spacing.xs
+                          onClicked: root.selectRegisteredGroup(
+                            String(modelData || ""))
+                        }
+                      }
+                    }
+                  }
+                }
+
+                Item {
+                  width: 1
+                  height: Style.spacing.md
+                }
+
+                Rectangle {
                   id: selectedGroupCard
 
                   objectName: "shortcutSelectedGroupCard"
@@ -1958,10 +2196,10 @@ Item {
                       Text {
                         id: selectedGroupCount
 
-                        text: root.t(root.selectedSection.bindings.length === 1
-                          ? "shortcut.bindingCount" : "shortcut.bindingCountPlural", {
-                            count: root.selectedSection.bindings.length
-                          })
+                        text: root.t("shortcut.filterResultCount", {
+                          count: root.registeredBindings.length,
+                          total: root.registeredBindingTotal
+                        })
                         color: Qt.darker(root.foreground, 1.4)
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.caption
@@ -1979,21 +2217,24 @@ Item {
 
                     ShortcutChord {
                       objectName: "shortcutSelectedGroupChord"
-                      parts: root.groupParts(root.selectedGroup)
+                      visible: root.registeredFilterGroup !== ""
+                      parts: root.groupParts(root.registeredFilterGroup)
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                     }
 
                     Toggle {
+                      visible: root.registeredFilterGroup !== ""
                       width: parent.width
                       label: root.t("common.enabled", {})
                       description: root.t("shortcut.groupEnabledHelp", {})
-                      checked: root.groupEnabled(root.selectedGroup)
+                      checked: root.groupEnabled(root.registeredFilterGroup)
                       foreground: root.foreground
                       accent: root.accent
                       fontFamily: root.fontFamily
                       onClicked: root.setGroupEnabled(
-                        root.selectedGroup, !root.groupEnabled(root.selectedGroup))
+                        root.registeredFilterGroup,
+                        !root.groupEnabled(root.registeredFilterGroup))
                     }
 
                     Item {
@@ -2002,10 +2243,15 @@ Item {
                       objectName: "shortcutListHeader"
                       width: parent.width
                       height: 24
-                      visible: width >= 720 && root.selectedSection.bindings.length > 0
-                      readonly property real chordWidth: 340
+                      visible: width >= 900 && root.registeredBindings.length > 0
+                      readonly property real chordWidth: 316
                       readonly property real visibilityX: width - 208
                       readonly property real editX: width - 116
+                      readonly property real typeRoleWidth: 224
+                      readonly property real titleTypeGap: 16
+                      readonly property real typeHudGap: 24
+                      readonly property real typeRoleX: visibilityX
+                        - typeHudGap - typeRoleWidth
 
                       Text {
                         x: 12
@@ -2018,11 +2264,23 @@ Item {
 
                       Text {
                         x: 12 + shortcutListHeader.chordWidth + 12
-                        width: Math.max(0, shortcutListHeader.visibilityX - x - 12)
+                        width: Math.max(0, shortcutListHeader.typeRoleX - x
+                          - shortcutListHeader.titleTypeGap)
                         text: root.t("shortcut.titleColumn", {})
                         color: Qt.darker(root.foreground, 1.45)
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.caption
+                      }
+
+                      Text {
+                        objectName: "shortcutTypeRoleHeader"
+                        x: shortcutListHeader.typeRoleX
+                        width: shortcutListHeader.typeRoleWidth
+                        text: root.t("shortcut.typeRoleColumn", {})
+                        color: Qt.darker(root.foreground, 1.45)
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                        horizontalAlignment: Text.AlignHCenter
                       }
 
                       Text {
@@ -2047,10 +2305,11 @@ Item {
                     }
 
                     Text {
-                      objectName: "shortcutEmptyGroupMessage"
+                      objectName: "shortcutRegisteredFilterIdle"
                       width: parent.width
-                      visible: root.selectedSection.bindings.length === 0
-                      text: root.t("shortcut.emptyGroup", {})
+                      visible: root.registeredBindings.length === 0
+                      text: root.t(root.registeredFilterActive
+                        ? "shortcut.filterNoResults" : "shortcut.filterIdle", {})
                       color: Qt.darker(root.foreground, 1.45)
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
@@ -2058,7 +2317,7 @@ Item {
                     }
 
                     Repeater {
-                      model: root.selectedSection.bindings
+                      model: root.registeredBindings
 
                       delegate: Components.BindingRow {
                         required property var modelData
@@ -2068,17 +2327,21 @@ Item {
                         height: implicitHeight
                         bindingData: modelData
                         language: root.uiLanguage
-                        interactive: root.groupEnabled(root.selectedGroup)
+                        interactive: root.groupEnabled(root.bindingGroup(modelData))
                           && !root.shortcutBusy && !root.awaitingSave
                         editable: root.bindingEditable(modelData)
                         editReason: root.bindingEditReason(modelData)
-                        visibleInHud: root.groupEnabled(root.selectedGroup)
+                        visibleInHud: root.groupEnabled(root.bindingGroup(modelData))
                           && root.bindingVisible(
                             modelData.presentation_id || modelData.id)
                         foreground: root.foreground
                         mutedForeground: Qt.darker(root.foreground, 1.55)
                         accent: root.accent
+                        surface: root.background
                         fontFamily: root.fontFamily
+                        iconResolver: function(iconName) {
+                          return Quickshell.iconPath(iconName, true)
+                        }
                         onVisibilityChangeRequested: function (bindingId, visibleInHud) {
                           root.setBindingVisible(bindingId, visibleInHud)
                         }

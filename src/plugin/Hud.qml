@@ -8,6 +8,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "I18n.js" as I18n
+import "VisibilityModel.js" as VisibilityModel
 
 PanelWindow {
   id: root
@@ -32,7 +33,7 @@ PanelWindow {
   readonly property int cardPadding: Math.round(Style.space(18) * hudScale)
   readonly property int headerHeight: Math.round(Style.space(34) * hudScale)
   readonly property int rowHeight: Math.round(Style.space(42) * hudScale)
-  readonly property int columnGap: Math.round(Style.space(14) * hudScale)
+  readonly property int columnGap: Math.round(Style.space(28) * hudScale)
   readonly property int baseColumnWidth: Math.round(Style.space(300) * hudScale)
   readonly property int usableHeight: Math.max(rowHeight, height - outerMargin * 2 - cardPadding * 2 - headerHeight)
   readonly property int rowsPerColumn: Math.max(1, Math.floor(usableHeight / rowHeight))
@@ -73,6 +74,20 @@ PanelWindow {
     if (hudPosition === "bottom")
       return height - outerMargin - cardHeight
     return Math.round((height - cardHeight) / 2)
+  }
+
+  function presentationIconSource(binding) {
+    const iconName = String(binding && binding.icon || "")
+    if (!iconName)
+      return ""
+    const resolved = String(Quickshell.iconPath(iconName, true) || "")
+    return resolved || "image://icon/" + iconName
+  }
+
+  function surfaceIsLight() {
+    return root.hudBackground.r * 0.2126
+      + root.hudBackground.g * 0.7152
+      + root.hudBackground.b * 0.0722 > 0.55
   }
 
   screen: focusedScreen
@@ -168,16 +183,41 @@ PanelWindow {
               }
             }
 
-            Text {
-              Layout.preferredWidth: Math.round(Style.space(18) * root.hudScale)
-              text: bindingRow.modelData.mouse === true ? "󰍽" : "󰌌"
-              color: root.hudAccent
-              font.family: Style.font.family
-              font.pixelSize: Math.round(Style.font.icon * root.hudScale)
-              horizontalAlignment: Text.AlignHCenter
+            Image {
+              id: presentationIcon
+
+              objectName: "hudPresentationIcon-"
+                + String(bindingRow.modelData.id || "")
+              Layout.preferredWidth: visible
+                ? Math.round(Style.space(20) * root.hudScale) : 0
+              Layout.preferredHeight: Math.round(Style.space(20) * root.hudScale)
+              sourceSize.width: Math.round(Style.space(20) * root.hudScale)
+              sourceSize.height: Math.round(Style.space(20) * root.hudScale)
+              source: root.presentationIconSource(bindingRow.modelData)
+              visible: String(source || "") !== ""
+              fillMode: Image.PreserveAspectFit
+              smooth: true
+
+              Text {
+                objectName: "hudPresentationIconFallback-"
+                  + String(bindingRow.modelData.id || "")
+                anchors.centerIn: parent
+                visible: presentationIcon.status === Image.Error
+                text: VisibilityModel.fallbackIconGlyph(
+                  String(bindingRow.modelData.displayKind || "action"))
+                color: VisibilityModel.typeAccent(
+                  String(bindingRow.modelData.displayKind || "action"),
+                  root.surfaceIsLight(), root.hudAccent)
+                font.family: Style.font.family
+                font.pixelSize: Math.round(
+                  Style.font.caption * root.hudScale)
+                font.weight: Font.DemiBold
+              }
             }
 
             Text {
+              objectName: "hudDescription-"
+                + String(bindingRow.modelData.id || "")
               Layout.fillWidth: true
               text: String(bindingRow.modelData.description || "")
               color: root.hudForeground
@@ -186,6 +226,41 @@ PanelWindow {
               elide: Text.ElideRight
               maximumLineCount: 1
               wrapMode: Text.NoWrap
+            }
+
+            Rectangle {
+              id: typeBadge
+
+              readonly property string displayKind: String(
+                bindingRow.modelData.displayKind || "action")
+              readonly property color typeAccent: VisibilityModel.typeAccent(
+                displayKind, root.surfaceIsLight(), root.hudAccent)
+              objectName: "hudTypeBadge-"
+                + String(bindingRow.modelData.id || "")
+              visible: bindingRow.width >= Math.round(
+                Style.space(230) * root.hudScale)
+              Layout.preferredWidth: visible
+                ? typeBadgeLabel.implicitWidth + Style.space(14) : 0
+              Layout.preferredHeight: Math.round(Style.space(22) * root.hudScale)
+              radius: height / 2
+              color: Qt.rgba(typeAccent.r, typeAccent.g, typeAccent.b, 0.16)
+              border.width: Math.max(1, Style.space(1))
+              border.color: Qt.rgba(
+                typeAccent.r, typeAccent.g, typeAccent.b, 0.42)
+
+              Text {
+                id: typeBadgeLabel
+
+                objectName: "hudTypeBadgeLabel-"
+                  + String(bindingRow.modelData.id || "")
+                anchors.centerIn: parent
+                text: I18n.text(root.language,
+                  VisibilityModel.typeBadgeKey(typeBadge.displayKind), {})
+                color: typeBadge.typeAccent
+                font.family: Style.font.family
+                font.pixelSize: Math.round(Style.font.caption * root.hudScale)
+                font.weight: Font.DemiBold
+              }
             }
           }
         }

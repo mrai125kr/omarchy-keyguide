@@ -4,6 +4,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import "HudModel.js" as HudModel
 import "I18n.js" as I18n
+import "VisibilityModel.js" as VisibilityModel
 
 Item {
   id: root
@@ -149,13 +150,11 @@ Item {
     && settings.groups.indexOf(modifierGroup) !== -1
   readonly property bool actionSuppressed: modifierState.actionPressed === true
     || wheelSuppressed
-  readonly property var displayBindings: allBindings.map(function(binding) {
-    const displayed = {}
-    for (const key in binding)
-      displayed[key] = binding[key]
-    displayed.description = root.displayDescription(binding)
-    return displayed
-  })
+  readonly property var displayBindings: VisibilityModel.presentedBindings(
+    allBindings,
+    shortcutStatus && shortcutStatus.actions ? shortcutStatus.actions : [],
+    actionCatalog && actionCatalog.items ? actionCatalog.items : [],
+    settings.language)
   readonly property var bindings: HudModel.forGroup(
     displayBindings,
     modifiers,
@@ -195,26 +194,6 @@ Item {
         return items[index]
     }
     return null
-  }
-
-  function displayDescription(binding) {
-    if (!binding || typeof binding !== "object")
-      return ""
-    const override = String(binding.title_override || "")
-    if (override)
-      return override
-    const kind = String(binding.selection_kind || "")
-    const selectionId = String(binding.selection_id || "")
-    if (kind === "application") {
-      const application = root.catalogItemById(selectionId)
-      if (application)
-        return String(application.title || binding.description || "")
-    }
-    return I18n.actionTitle(
-      settings.language,
-      String(binding.label_key || ""),
-      String(binding.description || "")
-    )
   }
 
   function initializeRuntime() {
@@ -329,9 +308,14 @@ Item {
         "kind", "id", "title", "englishTitle", "summary", "icon", "path",
         "keywords"
       ]
-      if (!hasExactKeys(item, names)
+      const enhancedNames = names.concat(["targetId", "launchKind"])
+      const hasEnhancedFields = hasExactKeys(item, enhancedNames)
+      if ((!hasExactKeys(item, names) && !hasEnhancedFields)
           || ["application", "command"].indexOf(item.kind) === -1
-          || !Array.isArray(item.keywords) || item.keywords.length > 64) {
+          || !Array.isArray(item.keywords) || item.keywords.length > 64
+          || (hasEnhancedFields
+            && (["desktopApp", "webapp", "command", "cmd"].indexOf(item.launchKind) === -1
+              || typeof item.targetId !== "string" || !item.targetId))) {
         throw new Error("action catalog item has an invalid shape")
       }
       const id = root.catalogString(item.id, "catalog item ID", 320, false)
@@ -352,7 +336,12 @@ Item {
         summary: root.catalogString(item.summary, "catalog summary", 512, true),
         icon: root.catalogString(item.icon, "catalog icon", 512, true),
         path: root.catalogString(item.path, "catalog path", 4096, true),
-        keywords: keywords
+        keywords: keywords,
+        targetId: hasEnhancedFields
+          ? root.catalogString(item.targetId, "catalog target ID", 1024, false)
+          : id,
+        launchKind: hasEnhancedFields ? item.launchKind
+          : (item.kind === "application" ? "desktopApp" : "command")
       }
     })
     const warnings = parsed.warnings.map(function(warning) {
@@ -666,18 +655,47 @@ Item {
     }
 
     const actionIds = []
+    const actionPresentationIds = []
     const actions = parsed.actions.map(function(action) {
+      const hasPresentationId = Object.prototype.hasOwnProperty.call(
+        action, "presentationId")
+      const shapeAction = Object.assign({}, action)
+      delete shapeAction.presentationId
       const actionNames = ["id", "title", "actionKind", "modifiers", "key"]
       const semanticActionNames = actionNames.concat([
         "labelKey", "selectionKind", "selectionId", "titleOverride"
       ])
       const enhancedActionNames = semanticActionNames.concat(["launchKind"])
-      const hasLegacySemanticFields = hasExactKeys(action, semanticActionNames)
-      const hasSemanticFields = hasExactKeys(action, enhancedActionNames)
-        || hasLegacySemanticFields
-      if ((!hasExactKeys(action, actionNames) && !hasSemanticFields)
+      const targetActionNames = enhancedActionNames.concat(["targetId"])
+      const legacyAgentActionNames = enhancedActionNames.concat(["agentName"])
+      const legacyBrowserActionNames = enhancedActionNames.concat(["browserName"])
+      const agentActionNames = targetActionNames.concat(["agentName"])
+      const browserActionNames = targetActionNames.concat(["browserName"])
+      const classifiedActionNames = targetActionNames.concat([
+        "displayKind", "roleKind", "targetName"
+      ])
+      const classifiedAgentActionNames = classifiedActionNames.concat(["agentName"])
+      const classifiedBrowserActionNames = classifiedActionNames.concat(["browserName"])
+      const hasLegacySemanticFields = hasExactKeys(shapeAction, semanticActionNames)
+      const hasLegacyAgentFields = hasExactKeys(shapeAction, legacyAgentActionNames)
+      const hasLegacyBrowserFields = hasExactKeys(shapeAction, legacyBrowserActionNames)
+      const hasAgentFields = hasExactKeys(shapeAction, agentActionNames)
+      const hasBrowserFields = hasExactKeys(shapeAction, browserActionNames)
+      const hasClassifiedFields = hasExactKeys(shapeAction, classifiedActionNames)
+      const hasClassifiedAgentFields = hasExactKeys(shapeAction, classifiedAgentActionNames)
+      const hasClassifiedBrowserFields = hasExactKeys(shapeAction, classifiedBrowserActionNames)
+      const hasTargetFields = hasExactKeys(shapeAction, targetActionNames)
+      const hasEnhancedSemanticFields = hasExactKeys(shapeAction, enhancedActionNames)
+      const hasSemanticFields = hasClassifiedFields || hasClassifiedAgentFields
+        || hasClassifiedBrowserFields || hasAgentFields || hasBrowserFields
+        || hasTargetFields || hasLegacyAgentFields || hasLegacyBrowserFields
+        || hasEnhancedSemanticFields || hasLegacySemanticFields
+      if ((!hasExactKeys(shapeAction, actionNames) && !hasSemanticFields)
           || typeof action.id !== "string" || !action.id
           || actionIds.indexOf(action.id) !== -1 || typeof action.title !== "string"
+          || (hasPresentationId
+            && (typeof action.presentationId !== "string" || !action.presentationId
+              || actionPresentationIds.indexOf(action.presentationId) !== -1))
           || ["exec", "lua"].indexOf(action.actionKind) === -1
           || !canonicalGroupForModifiers(action.modifiers)
           || typeof action.key !== "string" || supportedShortcutKeys.indexOf(action.key) === -1
@@ -686,14 +704,47 @@ Item {
               || typeof action.selectionId !== "string" || !action.selectionId
               || typeof action.labelKey !== "string"
               || typeof action.titleOverride !== "string"
+              || ((hasClassifiedFields || hasClassifiedAgentFields
+                    || hasClassifiedBrowserFields)
+                && (["action", "command", "cmd", "desktopApp", "webapp", "systemUi"]
+                      .indexOf(action.displayKind) === -1
+                  || ["", "agent", "browser", "editor"]
+                      .indexOf(action.roleKind) === -1
+                  || typeof action.targetName !== "string"))
               || (!hasLegacySemanticFields
-                && ["", "webapp"].indexOf(action.launchKind) === -1)))) {
+                && ["", "webapp", "desktopApp", "cmd"]
+                    .indexOf(action.launchKind) === -1)
+              || ((hasTargetFields || hasAgentFields || hasBrowserFields)
+                && (typeof action.targetId !== "string" || !action.targetId))
+              || ((hasLegacyAgentFields || hasAgentFields)
+                && (typeof action.agentName !== "string" || !action.agentName))
+              || ((hasLegacyBrowserFields || hasBrowserFields)
+                && (typeof action.browserName !== "string" || !action.browserName))))) {
         throw new Error("shortcut action has an invalid shape")
       }
       actionIds.push(action.id)
+      if (hasPresentationId) actionPresentationIds.push(action.presentationId)
       return {
-        id: action.id, title: action.title, actionKind: action.actionKind,
+        id: action.id, presentationId: hasPresentationId ? action.presentationId : "",
+        title: action.title, actionKind: action.actionKind,
         launchKind: hasLegacySemanticFields ? "" : String(action.launchKind || ""),
+        targetId: (hasTargetFields || hasAgentFields || hasBrowserFields
+            || hasClassifiedFields || hasClassifiedAgentFields
+            || hasClassifiedBrowserFields)
+          ? action.targetId
+          : (action.selectionKind === "application" || action.selectionKind === "command"
+              ? action.selectionId : "action:" + action.id),
+        agentName: (hasLegacyAgentFields || hasAgentFields
+            || hasClassifiedAgentFields) ? action.agentName : "",
+        browserName: (hasLegacyBrowserFields || hasBrowserFields
+            || hasClassifiedBrowserFields)
+          ? action.browserName : "",
+        displayKind: (hasClassifiedFields || hasClassifiedAgentFields
+            || hasClassifiedBrowserFields) ? action.displayKind : "",
+        roleKind: (hasClassifiedFields || hasClassifiedAgentFields
+            || hasClassifiedBrowserFields) ? action.roleKind : "",
+        targetName: (hasClassifiedFields || hasClassifiedAgentFields
+            || hasClassifiedBrowserFields) ? action.targetName : "",
         modifiers: action.modifiers.slice(), key: action.key,
         labelKey: hasSemanticFields ? action.labelKey : "",
         selectionKind: hasSemanticFields ? action.selectionKind : "action",
@@ -1135,6 +1186,14 @@ Item {
     })
   }
 
+  function handleCompositorEvent(event) {
+    if (!event || String(event.name || "") !== "configreloaded")
+      return false
+    refreshBindings()
+    refreshShortcutStatus()
+    return true
+  }
+
   onLockedChanged: if (locked) clearModifierState()
 
   onSettingsChanged: {
@@ -1158,7 +1217,7 @@ Item {
     target: Hyprland
 
     function onRawEvent(event) {
-      if (event && String(event.name || "") === "configreloaded") root.refreshBindings()
+      root.handleCompositorEvent(event)
     }
   }
 
