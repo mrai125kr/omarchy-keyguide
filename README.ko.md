@@ -57,6 +57,19 @@ PYTHONPATH=src/backend python -m keyguide_backend compat
 명령은 감지한 버전, 키보드 이벤트 장치 사용 가능 여부와 오류 원인을 JSON으로
 표시합니다. 지원되지 않는 환경에서는 0이 아닌 종료 코드를 반환합니다.
 
+Linux는 기본적으로 키보드와 포인터 이벤트 장치를 보호합니다. 저장소를 복제하거나
+플러그인을 추가한 뒤 저장소 디렉터리에서 입력 접근을 한 번 설정하세요.
+
+```sh
+sudo make install-input-access
+omarchy restart shell
+```
+
+이 명령은 systemd-logind의 `uaccess` 방식을 사용하는 udev 규칙 하나를 설치합니다.
+계정을 광범위하고 영구적인 `input` 그룹에 넣지 않고, 현재 활성 로컬 세션에만
+키보드·마우스·터치패드 이벤트 장치 접근을 허용합니다. 나중에 해제하려면 저장소가
+남아 있을 때 `sudo make uninstall-input-access`를 실행한 뒤 Shell을 다시 시작하세요.
+
 ## 설치와 사용
 
 ### Omarchy Git 플러그인으로 설치 — 권장

@@ -69,6 +69,21 @@ El comando devuelve JSON con las versiones detectadas, la disponibilidad del
 dispositivo de teclado y cualquier error. Termina con un código distinto de
 cero cuando el sistema no es compatible.
 
+Linux protege por defecto los dispositivos de eventos de teclado y puntero.
+Después de clonar el repositorio o añadir el complemento, configura el acceso
+una sola vez desde el directorio del repositorio:
+
+```sh
+sudo make install-input-access
+omarchy restart shell
+```
+
+El comando instala una regla udev que usa `uaccess` de systemd-logind. Solo
+autoriza los nodos de teclado, ratón y panel táctil para la sesión local activa,
+sin añadir la cuenta al grupo `input`, que es más amplio y permanente. Para
+revocarlo, ejecuta `sudo make uninstall-input-access` mientras conserves el
+repositorio y reinicia el Shell.
+
 ## Instalación y uso
 
 ### Complemento Git de Omarchy — recomendado

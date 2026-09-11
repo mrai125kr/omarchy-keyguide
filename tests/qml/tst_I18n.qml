@@ -46,6 +46,15 @@ TestCase {
     compare(I18n.text("ko", "missing.translation", {}), "missing.translation")
   }
 
+  function test_input_access_error_is_actionable_in_every_language() {
+    for (const language of I18n.languages()) {
+      const message = I18n.text(language.id, "error.inputAccess", {})
+      verify(message.indexOf("no_readable_keyboard") === -1, language.id)
+      verify(message.indexOf("errno") === -1, language.id)
+      verify(message.length > 30, language.id)
+    }
+  }
+
   function test_remove_copy_is_natural_in_every_supported_language() {
     compare(I18n.text("en", "common.remove", {}), "Remove")
     compare(I18n.text("ko", "common.remove", {}), "제거")

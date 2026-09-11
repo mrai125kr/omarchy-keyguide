@@ -135,6 +135,20 @@ Runtime requirements are the standard Omarchy environment, Python 3,
 `xkbcli`, and access to a readable keyboard event device. Source and git-plugin
 installation also require a C compiler (`base-devel` on Arch Linux).
 
+Linux protects keyboard and pointer event devices by default. After cloning or
+adding the plugin, enable access once from the repository directory:
+
+```sh
+sudo make install-input-access
+omarchy restart shell
+```
+
+This installs one udev rule that uses systemd-logind's `uaccess` mechanism. It
+grants access only to keyboard, mouse, and touchpad event nodes for the active
+local seat instead of adding the account to the broad, persistent `input`
+group. To revoke it while the repository is still present, run
+`sudo make uninstall-input-access` and restart the shell.
+
 ## Development
 
 Run the complete non-destructive automated verification suite:
@@ -262,7 +276,8 @@ PYTHONPATH=src/backend python -m keyguide_backend compat
 - If the observer cannot be built, install the standard Arch build tools with
   `omarchy pkg add base-devel`, then update or reinstall Keyguide.
 - If the HUD cannot observe held keys, check the probe result for a readable
-  keyboard event device.
+  keyboard event device. If it is unavailable, run `sudo make
+  install-input-access` from the repository and restart Omarchy Shell.
 - If the plugin is installed but its UI does not appear, run
   `omarchy restart shell` and check again.
 - Validate a downloaded source tree with `omarchy plugin validate .`.

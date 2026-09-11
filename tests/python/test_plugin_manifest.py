@@ -7,12 +7,12 @@ import unittest
 
 
 class PluginManifestTests(unittest.TestCase):
-    def test_manifests_keep_the_product_at_version_0_1_0(self):
-        """Both supported installation layouts must identify the same 0.1 release."""
+    def test_manifests_keep_the_product_at_version_0_1_1(self):
+        """Both supported installation layouts must identify the same patch release."""
         source = json.loads(Path("src/plugin/manifest.json").read_text(encoding="utf-8"))
         published = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
 
-        self.assertEqual("0.1.0", published["version"])
+        self.assertEqual("0.1.1", published["version"])
         self.assertEqual(published["version"], source["version"])
 
     def test_declares_service_settings_overlay_and_single_bar_widget(self):

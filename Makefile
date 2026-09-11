@@ -1,4 +1,4 @@
-.PHONY: build test test-c test-qml test-static install uninstall
+.PHONY: build test test-c test-qml test-static install uninstall install-input-access uninstall-input-access
 
 PYTHONPATH := src/backend
 PREFIX_ROOT ?=
@@ -12,7 +12,7 @@ RG ?= rg
 OBSERVER_SOURCES := src/observer/keyguide-observer.c src/observer/modifier_state.c
 OBSERVER_HEADERS := src/observer/modifier_state.h src/observer/input_codes.h
 SHELL_SCRIPTS := $(wildcard scripts/*.sh)
-QML_HARNESS_SCRIPTS := tests/qml/run_bar_widget_harness.sh tests/qml/run_plugin_runtime_harness.sh tests/qml/run_settings_installed_harness.sh tests/qml/run_settings_overlay_harness.sh tests/qml/run_settings_service_harness.sh tests/qml/run_shortcut_service_harness.sh
+QML_HARNESS_SCRIPTS := tests/qml/run_bar_widget_harness.sh tests/qml/run_plugin_runtime_harness.sh tests/qml/run_session_lock_fallback_harness.sh tests/qml/run_settings_installed_harness.sh tests/qml/run_settings_overlay_harness.sh tests/qml/run_settings_service_harness.sh tests/qml/run_shortcut_service_harness.sh
 
 build: build/keyguide-observer
 	python -m compileall -q src/backend
@@ -50,6 +50,7 @@ test-qml:
 	@! rg -q 'KEYGUIDE_SERVICE_OUTPUT_LIMIT_TEST_FAIL' build/service-output-limit-qml-test.log
 	@tests/qml/run_settings_service_harness.sh
 	@tests/qml/run_shortcut_service_harness.sh
+	@tests/qml/run_session_lock_fallback_harness.sh
 	@tests/qml/run_plugin_runtime_harness.sh
 	@set -e; install_root="$$(mktemp -d "$$PWD/qml-backend-environment-install.XXXXXX")"; harness="$$(mktemp ./qml-backend-environment-test.XXXXXX.qml)"; runtime_root="$$install_root$$HOME/.local/lib/omarchy-keyguide"; service_path="$$install_root$$HOME/.config/omarchy/plugins/mrai.keyguide/Service.qml"; trap 'rm -rf "$$install_root"; rm -f "$$harness"' EXIT; PREFIX_ROOT="$$install_root" bash scripts/install.sh; cp tests/qml/backend_environment_harness.qml "$$harness"; timeout 10s env KEYGUIDE_TEST_RUNTIME_ROOT="$$runtime_root" KEYGUIDE_TEST_SERVICE_PATH="$$service_path" QT_LOGGING_RULES='qt.qpa.services=false' quickshell --no-color -p "$$harness" > build/backend-environment-qml-test.log 2>&1 || { cat build/backend-environment-qml-test.log; exit 1; }; cat build/backend-environment-qml-test.log; rg -q 'KEYGUIDE_BACKEND_ENVIRONMENT_TEST_PASS' build/backend-environment-qml-test.log; ! rg -q 'KEYGUIDE_BACKEND_ENVIRONMENT_TEST_FAIL' build/backend-environment-qml-test.log; test ! -e "$$runtime_root/keyguide_backend/__pycache__"; PREFIX_ROOT="$$install_root" bash scripts/uninstall.sh; test ! -e "$$runtime_root" && test ! -L "$$runtime_root"
 	@test ! -e Commons && test ! -L Commons && test ! -e Ui && test ! -L Ui
@@ -73,7 +74,7 @@ test-static:
 	$(QMLLINT) src/plugin/*.qml src/plugin/components/*.qml
 	@test -n "$(SHELL_SCRIPTS)" || { printf 'error: no shell scripts found under scripts/\n' >&2; exit 1; }
 	bash -n $(SHELL_SCRIPTS) $(QML_HARNESS_SCRIPTS)
-	@test "$$(find $(QML_HARNESS_SCRIPTS) -maxdepth 0 -type f -perm -u+x | wc -l)" -eq 6
+	@test "$$(find $(QML_HARNESS_SCRIPTS) -maxdepth 0 -type f -perm -u+x | wc -l)" -eq 7
 	@command -v "$(RG)" >/dev/null 2>&1 || { printf 'error: ripgrep not found: %s\n' "$(RG)" >&2; exit 127; }
 	@matches="$$($(RG) -n 'EVIOCGRAB|/dev/uinput' src scripts)"; status=$$?; \
 	if test $$status -eq 0; then \
@@ -88,7 +89,7 @@ test-static:
 		printf 'error: source scan failed with status %s\n' "$$status" >&2; exit "$$status"; \
 	fi
 	@! $(RG) -n 'Components\.ExecutablePicker|filePicker|assignmentExecutable|showHiddenFiles|Browse…' src/plugin/Settings.qml
-	@test "$$($(RG) -l '"version": "0\.1\.0"' manifest.json src/plugin/manifest.json | wc -l)" -eq 2
+	@test "$$($(RG) -l '"version": "0\.1\.1"' manifest.json src/plugin/manifest.json | wc -l)" -eq 2
 
 test: build test-c test-qml test-static
 	PYTHONPATH=$(PYTHONPATH) python -m unittest discover -s tests/python -v
@@ -98,3 +99,9 @@ install: build
 
 uninstall:
 	PREFIX_ROOT="$(PREFIX_ROOT)" REMOVE_PREFERENCES="$(REMOVE_PREFERENCES)" bash scripts/uninstall.sh
+
+install-input-access:
+	bash scripts/input-access.sh install
+
+uninstall-input-access:
+	bash scripts/input-access.sh remove

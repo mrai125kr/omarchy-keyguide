@@ -231,6 +231,16 @@ ShellRoot {
           testRoot.fail("observer success did not clear only its own diagnostic")
           return
         }
+        testRoot.service.settings = Object.assign({}, testRoot.service.settings, {
+          language: "ko"
+        })
+        testRoot.service.acceptObserverErrorLine(
+          "{\"error\":\"no_readable_keyboard\",\"errno\":13}")
+        if (String(testRoot.service.observerError)
+            !== "키가이드가 키보드 입력을 읽을 권한이 없습니다. 입력 접근을 한 번 설정한 뒤 Omarchy Shell을 다시 시작하세요.") {
+          testRoot.fail("input permission failure was not localized and actionable")
+          return
+        }
         lockService.locked = true
         testRoot.advance(8)
         return

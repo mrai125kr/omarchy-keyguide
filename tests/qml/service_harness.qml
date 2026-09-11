@@ -86,6 +86,9 @@ ShellRoot {
       boundedProcessCommandPrefix: boundedProcessPrefix,
       hudSource: "",
       settingsPath: "",
+      sessionLockCommand: [
+        "/usr/bin/python3", "-c", "raise SystemExit(2)"
+      ],
       observerCommand: [
         "/usr/bin/python3",
         "-c",

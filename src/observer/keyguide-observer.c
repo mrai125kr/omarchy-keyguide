@@ -169,14 +169,17 @@ static bool read_pressed_keys(int fd, bool has_key_events,
 
 static int discover_keyboards(int epoll_fd,
                               struct observed_device devices[MAX_DEVICES],
-                              struct modifier_state *state)
+                              struct modifier_state *state,
+                              int *discovery_error)
 {
     DIR *input_directory;
     struct dirent *entry;
     int count = 0;
 
+    *discovery_error = 0;
     input_directory = opendir("/dev/input");
     if (input_directory == NULL) {
+        *discovery_error = errno;
         return 0;
     }
 
@@ -197,6 +200,9 @@ static int discover_keyboards(int epoll_fd,
 
         fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
         if (fd < 0) {
+            if (*discovery_error == 0 || errno == EACCES) {
+                *discovery_error = errno;
+            }
             continue;
         }
         if (!is_observed_input(fd, &has_key_events)) {
@@ -256,6 +262,7 @@ int main(void)
     struct epoll_event events[MAX_EVENTS];
     int epoll_fd;
     int active_devices;
+    int discovery_error;
     size_t index;
     struct sigaction ignored_signal = {0};
 
@@ -278,13 +285,14 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    active_devices = discover_keyboards(epoll_fd, devices, &state);
+    active_devices = discover_keyboards(epoll_fd, devices, &state,
+                                        &discovery_error);
     if (active_devices < 0) {
         close(epoll_fd);
         return EXIT_FAILURE;
     }
     if (active_devices == 0) {
-        emit_error("no_readable_keyboard", 0);
+        emit_error("no_readable_keyboard", discovery_error);
         close(epoll_fd);
         return EXIT_FAILURE;
     }
@@ -390,7 +398,7 @@ int main(void)
         }
     }
 
-    emit_error("no_readable_keyboard", 0);
+    emit_error("no_readable_keyboard", ENODEV);
     close(epoll_fd);
     return EXIT_FAILURE;
 }

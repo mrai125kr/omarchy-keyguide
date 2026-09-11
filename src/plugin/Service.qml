@@ -18,6 +18,7 @@ Item {
   property string runtimeRoot: home + "/.local/lib/omarchy-keyguide"
   property string settingsPath: dataHome + "/omarchy-keyguide/settings.json"
   property var observerCommand: [runtimeRoot + "/bin/keyguide-observer"]
+  property var sessionLockCommand: ["omarchy-hyprland-session-locked"]
   property var bindingsCommand: ["python3", "-m", "keyguide_backend", "bindings", "--json"]
   property var settingsCommand: ["python3", "-m", "keyguide_backend", "settings", "get"]
   property var settingsPatchCommandPrefix: [
@@ -108,6 +109,9 @@ Item {
   readonly property bool actionCatalogWatchTimerRunning: actionCatalogWatchTimer.running
   property bool wheelSuppressed: false
   property bool dismissedForSuperCycle: false
+  property bool fallbackSessionLocked: true
+  property bool sessionLockProbeActive: false
+  property bool sessionLockProbeStarted: false
 
   readonly property var presentationSettingKeys: [
     "enabled",
@@ -140,7 +144,9 @@ Item {
     if (!root.shell || typeof root.shell.serviceFor !== "function") return null
     return root.shell.serviceFor("omarchy.lock")
   }
-  readonly property bool locked: lockService === null || lockService.locked !== false
+  readonly property bool usingSessionLockFallback: lockService === null
+  readonly property bool locked: usingSessionLockFallback
+    ? fallbackSessionLocked : lockService.locked !== false
   readonly property bool observerShouldRun: runtimeReady
     && settings.enabled === true && !locked
   readonly property bool observerRunning: observerProcess.running
@@ -508,6 +514,28 @@ Item {
       wheelSuppressionTimer.restart()
     }
     observerError = ""
+  }
+
+  function acceptObserverErrorLine(line) {
+    const message = String(line || "").trim()
+    if (!message) return
+    try {
+      const parsed = JSON.parse(message)
+      if (hasExactKeys(parsed, ["error", "errno"])
+          && parsed.error === "no_readable_keyboard"
+          && typeof parsed.errno === "number"
+          && Number.isFinite(parsed.errno)
+          && Math.floor(parsed.errno) === parsed.errno) {
+        observerError = I18n.text(
+          settings.language, "error.inputAccess", {})
+        clearModifierState()
+        return
+      }
+    } catch (error) {
+      // Preserve the existing diagnostic for non-protocol observer output.
+    }
+    observerError = "observer: " + message.slice(0, 2048)
+    clearModifierState()
   }
 
   function refreshBindings() {
@@ -1229,6 +1257,46 @@ Item {
   }
 
   Timer {
+    interval: 250
+    repeat: true
+    running: root.usingSessionLockFallback
+    triggeredOnStart: true
+    onTriggered: {
+      if (!sessionLockProcess.running && !root.sessionLockProbeActive) {
+        root.sessionLockProbeActive = true
+        root.sessionLockProbeStarted = false
+        sessionLockProcess.running = true
+      }
+    }
+  }
+
+  Process {
+    id: sessionLockProcess
+    command: root.sessionLockCommand
+
+    onStarted: root.sessionLockProbeStarted = true
+
+    onRunningChanged: {
+      if (!running && root.sessionLockProbeActive
+          && !root.sessionLockProbeStarted) {
+        if (root.usingSessionLockFallback)
+          root.fallbackSessionLocked = true
+        root.sessionLockProbeActive = false
+      }
+    }
+
+    onExited: function(exitCode) {
+      if (root.usingSessionLockFallback) {
+        if (exitCode === 0) root.fallbackSessionLocked = true
+        else if (exitCode === 1) root.fallbackSessionLocked = false
+        else root.fallbackSessionLocked = true
+      }
+      root.sessionLockProbeActive = false
+      root.sessionLockProbeStarted = false
+    }
+  }
+
+  Timer {
     id: actionCatalogWatchTimer
     interval: 2000
     repeat: true
@@ -1383,13 +1451,7 @@ Item {
 
     stderr: SplitParser {
       splitMarker: "\n"
-      onRead: function(line) {
-        const message = String(line || "").trim()
-        if (message) {
-          root.observerError = "observer: " + message
-          root.clearModifierState()
-        }
-      }
+      onRead: function(line) { root.acceptObserverErrorLine(line) }
     }
 
     onStarted: {

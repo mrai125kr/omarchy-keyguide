@@ -54,6 +54,19 @@ PYTHONPATH=src/backend python -m keyguide_backend compat
 该命令以 JSON 输出检测到的版本、键盘事件设备可用性和具体错误。不受支持时会
 返回非零退出码。
 
+Linux 默认保护键盘和指针事件设备。克隆仓库或添加插件后，请在仓库目录中完成一次
+输入访问设置：
+
+```sh
+sudo make install-input-access
+omarchy restart shell
+```
+
+该命令安装一条使用 systemd-logind `uaccess` 机制的 udev 规则。它不会把账户加入
+权限范围更广且永久生效的 `input` 组，只允许当前活动的本地会话访问键盘、鼠标和
+触摸板事件节点。如需撤销，请在仓库仍存在时运行 `sudo make uninstall-input-access`，
+然后重启 Shell。
+
 ## 安装与使用
 
 ### 通过 Omarchy Git 插件安装 — 推荐

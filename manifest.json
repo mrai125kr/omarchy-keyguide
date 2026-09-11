@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "mrai.keyguide",
   "name": "Omarchy Keyguide",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "mrai",
   "license": "MIT",
   "description": "Input-transparent shortcut HUD with safe editing for Omarchy bindings.",

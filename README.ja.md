@@ -56,6 +56,20 @@ PYTHONPATH=src/backend python -m keyguide_backend compat
 検出したバージョン、キーボードイベントデバイスの利用可否、エラー理由を JSON
 で表示し、未対応環境では 0 以外の終了コードを返します。
 
+Linux は既定でキーボードとポインターのイベントデバイスを保護します。リポジトリを
+複製またはプラグインを追加した後、リポジトリ内で入力アクセスを一度設定します。
+
+```sh
+sudo make install-input-access
+omarchy restart shell
+```
+
+これは systemd-logind の `uaccess` を使う udev ルールを 1 つ導入します。広範で
+永続的な `input` グループへアカウントを追加せず、現在アクティブなローカルセッション
+だけにキーボード、マウス、タッチパッドのイベントアクセスを許可します。解除する場合は
+リポジトリが残っているうちに `sudo make uninstall-input-access` を実行し、Shell を
+再起動してください。
+
 ## インストールと使い方
 
 ### Omarchy Git プラグインとして導入 — 推奨
