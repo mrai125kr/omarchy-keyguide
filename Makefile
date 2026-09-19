@@ -1,4 +1,4 @@
-.PHONY: build test test-c test-qml test-static install uninstall install-input-access uninstall-input-access
+.PHONY: build test test-ci test-c test-qml test-portable-static test-static install uninstall install-input-access uninstall-input-access
 
 PYTHONPATH := src/backend
 PREFIX_ROOT ?=
@@ -8,6 +8,7 @@ CFLAGS ?= -std=c17 -O2 -Wall -Wextra -Wpedantic -Werror
 CPPFLAGS ?=
 QMLLINT ?= /usr/lib/qt6/bin/qmllint
 RG ?= rg
+PYTHON ?= python
 
 OBSERVER_SOURCES := src/observer/keyguide-observer.c src/observer/modifier_state.c
 OBSERVER_HEADERS := src/observer/modifier_state.h src/observer/input_codes.h
@@ -15,7 +16,7 @@ SHELL_SCRIPTS := $(wildcard scripts/*.sh)
 QML_HARNESS_SCRIPTS := tests/qml/run_bar_widget_harness.sh tests/qml/run_plugin_runtime_harness.sh tests/qml/run_session_lock_fallback_harness.sh tests/qml/run_settings_installed_harness.sh tests/qml/run_settings_overlay_harness.sh tests/qml/run_settings_service_harness.sh tests/qml/run_shortcut_service_harness.sh
 
 build: build/keyguide-observer
-	python -m compileall -q src/backend
+	$(PYTHON) -m compileall -q src/backend
 
 build/keyguide-observer: $(OBSERVER_SOURCES) $(OBSERVER_HEADERS)
 	@mkdir -p build
@@ -69,9 +70,7 @@ test-qml:
 	@rg -q '^\s*mask:\s*Region \{\}\s*$$' src/plugin/Hud.qml
 	@! rg 'MouseArea|TapHandler|HoverHandler|DragHandler|WheelHandler|PointerHandler|MultiPointTouchArea|Keys\.|Shortcut|FocusScope|forceActiveFocus|activeFocusOnTab:\s*true|focus:\s*true|keyboardFocus:.*(OnDemand|Exclusive)' src/plugin/Hud.qml
 
-test-static:
-	@command -v "$(QMLLINT)" >/dev/null 2>&1 || { printf 'error: qmllint not found: %s\n' "$(QMLLINT)" >&2; exit 127; }
-	$(QMLLINT) src/plugin/*.qml src/plugin/components/*.qml
+test-portable-static:
 	@test -n "$(SHELL_SCRIPTS)" || { printf 'error: no shell scripts found under scripts/\n' >&2; exit 1; }
 	bash -n $(SHELL_SCRIPTS) $(QML_HARNESS_SCRIPTS)
 	@test "$$(find $(QML_HARNESS_SCRIPTS) -maxdepth 0 -type f -perm -u+x | wc -l)" -eq 7
@@ -91,8 +90,15 @@ test-static:
 	@! $(RG) -n 'Components\.ExecutablePicker|filePicker|assignmentExecutable|showHiddenFiles|Browse…' src/plugin/Settings.qml
 	@test "$$($(RG) -l '"version": "0\.1\.1"' manifest.json src/plugin/manifest.json | wc -l)" -eq 2
 
+test-static: test-portable-static
+	@command -v "$(QMLLINT)" >/dev/null 2>&1 || { printf 'error: qmllint not found: %s\n' "$(QMLLINT)" >&2; exit 127; }
+	$(QMLLINT) src/plugin/*.qml src/plugin/components/*.qml
+
+test-ci: build test-c test-portable-static
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m unittest discover -s tests/python -v
+
 test: build test-c test-qml test-static
-	PYTHONPATH=$(PYTHONPATH) python -m unittest discover -s tests/python -v
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m unittest discover -s tests/python -v
 
 install: build
 	PREFIX_ROOT="$(PREFIX_ROOT)" bash scripts/install.sh

@@ -67,8 +67,11 @@ omarchy restart shell
 
 이 명령은 systemd-logind의 `uaccess` 방식을 사용하는 udev 규칙 하나를 설치합니다.
 계정을 광범위하고 영구적인 `input` 그룹에 넣지 않고, 현재 활성 로컬 세션에만
-키보드·마우스·터치패드 이벤트 장치 접근을 허용합니다. 나중에 해제하려면 저장소가
-남아 있을 때 `sudo make uninstall-input-access`를 실행한 뒤 Shell을 다시 시작하세요.
+키보드·마우스·터치패드 이벤트 장치 접근을 허용합니다. 이 ACL은 Keyguide
+프로세스만이 아니라 활성 세션의 사용자 계정에 부여되므로, 권한이 유지되는 동안
+같은 사용자로 실행되는 다른 프로세스도 선택된 이벤트 장치를 읽을 수 있습니다.
+나중에 해제하려면 저장소가 남아 있을 때 `sudo make uninstall-input-access`를 실행한
+뒤 Shell을 다시 시작하세요.
 
 ## 설치와 사용
 
@@ -192,6 +195,10 @@ make build
 
 `make test`는 비파괴 자동 검증을 실행하고 `make build`는 입력 관찰기 빌드와
 Python 백엔드 컴파일 검사를 실행합니다.
+
+GitHub Actions에서는 `make test-ci`로 이식 가능한 C·Python·셸 문법·안전성 검사를
+실행합니다. QML과 플러그인 검증 하네스에는 실제 Omarchy/Quickshell 환경이 필요하므로,
+릴리스 전에는 지원되는 Omarchy PC에서 전체 `make test`도 실행해야 합니다.
 
 ## 라이선스
 

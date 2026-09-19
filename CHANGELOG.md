@@ -2,6 +2,19 @@
 
 All notable changes to Omarchy Keyguide are documented in this file.
 
+## [Unreleased]
+
+### Documentation
+
+- Clarified that active-seat `uaccess` grants the logged-in user account—not
+  only the Keyguide process—read access to the selected input event nodes.
+
+### Infrastructure
+
+- Added read-only GitHub Actions CI for portable C, Python, shell, and safety
+  checks while retaining the full Omarchy/Quickshell suite for release testing
+  on a supported Omarchy host.
+
 ## [0.1.1] - 2026-09-12
 
 ### Fixed
@@ -38,5 +51,6 @@ All notable changes to Omarchy Keyguide are documented in this file.
 
 - Initial public release.
 
+[Unreleased]: https://github.com/mrai125kr/omarchy-keyguide/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/mrai125kr/omarchy-keyguide/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mrai125kr/omarchy-keyguide/releases/tag/v0.1.0

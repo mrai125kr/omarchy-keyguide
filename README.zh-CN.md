@@ -64,8 +64,9 @@ omarchy restart shell
 
 该命令安装一条使用 systemd-logind `uaccess` 机制的 udev 规则。它不会把账户加入
 权限范围更广且永久生效的 `input` 组，只允许当前活动的本地会话访问键盘、鼠标和
-触摸板事件节点。如需撤销，请在仓库仍存在时运行 `sudo make uninstall-input-access`，
-然后重启 Shell。
+触摸板事件节点。该 ACL 授予的是活动会话的用户账户，而不只限于 Keyguide 进程；
+在权限生效期间，以同一用户身份运行的其他进程也能读取这些选定的事件节点。如需撤销，
+请在仓库仍存在时运行 `sudo make uninstall-input-access`，然后重启 Shell。
 
 ## 安装与使用
 
@@ -178,6 +179,10 @@ make build
 
 `make test` 运行非破坏性自动测试；`make build` 构建输入观察器并编译检查
 Python 后端。
+
+GitHub Actions 使用 `make test-ci` 运行可移植的 C、Python、Shell 语法和安全性
+检查。QML 与插件验证测试需要真实的 Omarchy/Quickshell 环境，因此发布前仍须在
+受支持的 Omarchy 主机上运行完整的 `make test`。
 
 ## 许可证
 

@@ -146,8 +146,10 @@ omarchy restart shell
 This installs one udev rule that uses systemd-logind's `uaccess` mechanism. It
 grants access only to keyboard, mouse, and touchpad event nodes for the active
 local seat instead of adding the account to the broad, persistent `input`
-group. To revoke it while the repository is still present, run
-`sudo make uninstall-input-access` and restart the shell.
+group. The ACL is granted to the active session's user account, not only to the
+Keyguide process. While it is active, any process running as that user can read
+those selected event nodes. To revoke it while the repository is still
+present, run `sudo make uninstall-input-access` and restart the shell.
 
 ## Development
 
@@ -156,6 +158,11 @@ Run the complete non-destructive automated verification suite:
 ```sh
 make test
 ```
+
+GitHub Actions runs `make test-ci` for the portable C, Python, shell-syntax,
+and safety checks. The QML and plugin-validation harnesses depend on a real
+Omarchy/Quickshell installation, so release verification must also run the full
+`make test` suite on a supported Omarchy host.
 
 Build the observer and compile-check the Python backend separately:
 

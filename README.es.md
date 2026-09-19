@@ -80,9 +80,11 @@ omarchy restart shell
 
 El comando instala una regla udev que usa `uaccess` de systemd-logind. Solo
 autoriza los nodos de teclado, ratón y panel táctil para la sesión local activa,
-sin añadir la cuenta al grupo `input`, que es más amplio y permanente. Para
-revocarlo, ejecuta `sudo make uninstall-input-access` mientras conserves el
-repositorio y reinicia el Shell.
+sin añadir la cuenta al grupo `input`, que es más amplio y permanente. La ACL
+se concede a la cuenta de usuario de la sesión activa, no únicamente al proceso
+de Keyguide; mientras esté vigente, otros procesos ejecutados como ese usuario
+también pueden leer esos nodos de eventos. Para revocarlo, ejecuta `sudo make
+uninstall-input-access` mientras conserves el repositorio y reinicia el Shell.
 
 ## Instalación y uso
 
@@ -218,6 +220,12 @@ make build
 
 `make test` ejecuta la verificación automática no destructiva. `make build`
 compila el observador y comprueba el backend de Python.
+
+GitHub Actions ejecuta `make test-ci` para las comprobaciones portátiles de C,
+Python, sintaxis de Shell y seguridad. Los arneses de QML y validación del
+complemento necesitan una instalación real de Omarchy/Quickshell, por lo que
+antes de una versión también debe ejecutarse la suite completa `make test` en
+un equipo Omarchy compatible.
 
 ## Licencia
 

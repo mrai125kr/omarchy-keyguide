@@ -27,6 +27,7 @@ class PluginManifestTests(unittest.TestCase):
         self.assertEqual(manifest["entryPoints"]["barWidget"], "BarWidget.qml")
         self.assertFalse(manifest["barWidget"]["allowMultiple"])
 
+    @unittest.skipUnless(shutil.which("omarchy"), "requires the Omarchy CLI")
     def test_repository_root_is_an_installable_omarchy_plugin(self):
         source = json.loads(Path("src/plugin/manifest.json").read_text(encoding="utf-8"))
         published = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
