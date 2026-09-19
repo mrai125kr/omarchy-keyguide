@@ -604,10 +604,19 @@ class CatalogCliTests(unittest.TestCase):
                 "XDG_DATA_DIRS": str(empty_system),
                 "PATH": str(commands),
             }
+            discovery_factory = lambda **_kwargs: CatalogDiscovery(
+                os.environ,
+                launcher,
+                launcher,
+                launcher,
+            )
             output = io.StringIO()
             with (
                 patch.dict(os.environ, environment, clear=True),
-                patch("keyguide_backend.__main__.catalog.DEFAULT_LAUNCHER", launcher),
+                patch(
+                    "keyguide_backend.__main__.catalog.CatalogDiscovery",
+                    side_effect=discovery_factory,
+                ),
                 patch.object(
                     os.sys,
                     "argv",
