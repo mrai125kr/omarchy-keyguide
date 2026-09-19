@@ -6,7 +6,7 @@
 
 static inline bool input_code_is_keyboard_action(unsigned int code)
 {
-    bool gamepad_button = code >= BTN_DPAD_UP && code <= BTN_GRIPR2;
+    bool gamepad_button = code >= BTN_DPAD_UP && code <= 0x227U;
 
     return (code > KEY_RESERVED && code < BTN_MISC) ||
            (code >= KEY_OK && code < BTN_TRIGGER_HAPPY1 &&

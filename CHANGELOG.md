@@ -14,6 +14,8 @@ All notable changes to Omarchy Keyguide are documented in this file.
 - Added read-only GitHub Actions CI for portable C, Python, shell, and safety
   checks while retaining the full Omarchy/Quickshell suite for release testing
   on a supported Omarchy host.
+- Kept observer builds compatible with older Linux input headers that do not
+  yet name the newest gamepad button codes.
 
 ## [0.1.1] - 2026-09-12
 
