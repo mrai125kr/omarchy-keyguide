@@ -115,7 +115,7 @@ static void test_non_mouse_buttons_do_not_count_as_actions(void)
     assert(!modifier_state_apply(&state, 42, BTN_TOOL_FINGER, 1));
     assert(!modifier_state_apply(&state, 42, BTN_GAMEPAD, 1));
     assert(!modifier_state_apply(&state, 42, BTN_DPAD_UP, 1));
-    assert(!modifier_state_apply(&state, 42, BTN_GRIPL, 1));
+    assert(!modifier_state_apply(&state, 42, 0x224U, 1));
     assert(!state.action_pressed);
 }
 

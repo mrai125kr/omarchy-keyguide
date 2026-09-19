@@ -80,7 +80,7 @@ static void test_does_not_classify_pointer_or_touch_nodes_as_keyboards(void)
     advertise(mouse, BTN_LEFT);
     advertise(touch, BTN_TOUCH);
     advertise(gamepad, BTN_DPAD_UP);
-    advertise(gamepad, BTN_GRIPL);
+    advertise(gamepad, 0x224U);
 
     assert(!has_keyboard_key(mouse));
     assert(!has_keyboard_key(touch));
